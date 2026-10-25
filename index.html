@@ -8,7 +8,7 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>Práctica de piano</h1>
+      <h1>MIDICoach</h1>
 
       <div class="group">
         <label class="btn" for="file">Abrir MIDI</label>
@@ -21,7 +21,24 @@
         <select id="devices" aria-label="Dispositivo MIDI de entrada" disabled>
           <option>Sin dispositivos</option>
         </select>
+        <select id="keys" aria-label="Tamaño del teclado"></select>
+        <button
+          id="calibrate"
+          class="btn ghost"
+          type="button"
+          title="Pulsa la tecla más grave y luego la más aguda de tu piano"
+        >
+          Calibrar
+        </button>
         <span id="lastKey" class="pill" title="Última tecla detectada">Tecla: —</span>
+      </div>
+
+      <div class="group">
+        <label id="audioLabel" class="toggle" title="Conecta un teclado MIDI para activar el audio">
+          <input id="audio" type="checkbox" disabled />
+          <span>Audio de la canción</span>
+        </label>
+        <input id="volume" type="range" min="0" max="100" value="70" aria-label="Volumen" disabled />
       </div>
     </header>
 
@@ -31,6 +48,7 @@
       <p id="songInfo" class="song-info">
         Abre un archivo .mid o prueba la canción de ejemplo para empezar.
       </p>
+      <p id="adapt" class="adapt" hidden></p>
       <div id="tracks" class="tracks" role="group" aria-label="Pistas a practicar"></div>
     </section>
 

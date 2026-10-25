@@ -1,4 +1,4 @@
-import type { NoteEvent } from "./motor/types";
+import type { NoteEvent } from "./motor";
 import type { ParsedSong, ParsedTrack } from "./midiFile";
 
 /** "Himno a la alegría" (Beethoven, dominio público) con acordes en la mano izquierda. */
@@ -29,6 +29,8 @@ export function demoSong(): ParsedSong {
     index: 0,
     name: "Mano derecha (melodía)",
     instrument: "acoustic grand piano",
+    program: 0,
+    percussion: false,
     noteCount: melody.length,
     notes: melody.map(([m, b, d]) => mk(0, m, b, d)),
   };
@@ -36,9 +38,27 @@ export function demoSong(): ParsedSong {
   const left: ParsedTrack = {
     index: 1,
     name: "Mano izquierda (acordes)",
-    instrument: "acoustic grand piano",
+    instrument: "string ensemble 1",
+    program: 48,
+    percussion: false,
     noteCount: leftNotes.length,
     notes: leftNotes,
+  };
+
+  // Batería sencilla: bombo en los tiempos pares, caja en los impares y hi-hat cada medio tiempo.
+  const drumNotes: NoteEvent[] = [];
+  for (let b = 0; b < 16; b++) {
+    drumNotes.push(mk(2, b % 2 === 0 ? 36 : 38, b, 0.2));
+    drumNotes.push(mk(2, 42, b, 0.1), mk(2, 42, b + 0.5, 0.1));
+  }
+  const drums: ParsedTrack = {
+    index: 2,
+    name: "Batería",
+    instrument: "standard kit",
+    program: 0,
+    percussion: true,
+    noteCount: drumNotes.length,
+    notes: drumNotes,
   };
 
   return {
@@ -47,5 +67,6 @@ export function demoSong(): ParsedSong {
     bpm: 100,
     totalNotes: right.noteCount + left.noteCount,
     tracks: [right, left],
+    percussion: [drums],
   };
 }

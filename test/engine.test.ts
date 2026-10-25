@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { groupNotes, PausableClock, PracticeEngine } from "../src/index";
-import type { EngineEvent, NoteEvent } from "../src/index";
+import { groupNotes, PausableClock, PracticeEngine } from "../src/motor/index";
+import type { EngineEvent, NoteEvent } from "../src/motor/index";
 
 const n = (midi: number, time: number, duration = 0.5): NoteEvent => ({ midi, time, duration });
 
@@ -224,5 +224,18 @@ describe("PracticeEngine", () => {
     }
     assert.deepEqual(progress, [0.25, 0.75, 1]);
     assert.equal(e.getSnapshot().state, "finished");
+  });
+});
+
+describe("PracticeEngine: intro silenciosa", () => {
+  it("salta el silencio largo previo a la primera nota dejando 2 s de margen", () => {
+    const ft = fakeTime();
+    const e = new PracticeEngine([n(60, 30)], { now: ft.now });
+    assert.equal(e.getSnapshot().time, 28);
+    e.start();
+    ft.advance(5000);
+    e.update();
+    assert.equal(e.getSnapshot().state, "waiting");
+    assert.equal(e.getSnapshot().time, 30);
   });
 });

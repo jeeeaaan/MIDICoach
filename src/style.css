@@ -108,6 +108,40 @@ select {
   font: inherit;
 }
 
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #1d2638;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle:has(input:checked) {
+  border-color: var(--ok);
+  background: rgba(61, 220, 132, 0.12);
+}
+
+.toggle:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type="range"] {
+  width: 110px;
+  accent-color: var(--accent);
+}
+
 .pill {
   display: inline-block;
   padding: 6px 10px;
@@ -150,6 +184,15 @@ select {
 
 .song-info strong {
   color: var(--text);
+}
+
+.adapt {
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: rgba(255, 176, 32, 0.1);
+  font-size: 14px;
 }
 
 .tracks {

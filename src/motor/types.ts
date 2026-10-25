@@ -12,6 +12,8 @@ export interface NoteEvent {
   velocity?: number;
   /** Índice de la pista de origen (opcional, útil para la interfaz). */
   track?: number;
+  /** Nota del archivo original, solo si fue movida de octava para el teclado del usuario. */
+  originalMidi?: number;
 }
 
 /** Conjunto de notas que comienzan "al mismo tiempo" y se tocan como una unidad. */
@@ -30,6 +32,8 @@ export type EngineEvent =
   | { type: "stateChange"; state: EngineState; previous: EngineState }
   | { type: "waiting"; group: NoteGroup }
   | { type: "groupCompleted"; group: NoteGroup }
+  /** Una tecla del grupo actual se acertó (aún pueden faltar otras del acorde). */
+  | { type: "noteMatched"; midi: number; group: NoteGroup }
   | { type: "wrongNote"; midi: number; group: NoteGroup }
   | { type: "chordWindowExpired"; group: NoteGroup; missing: number[] }
   | { type: "finished" };

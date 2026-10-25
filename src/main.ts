@@ -1,7 +1,18 @@
 import "./style.css";
+import type { PlayableNote } from "./audio/backing";
+import { SongAudio } from "./audio/songAudio";
 import { demoSong } from "./demo";
-import { PracticeEngine } from "./motor/engine";
-import type { EngineSnapshot, EngineState, NoteEvent } from './motor/types';
+import { adaptNotesToRange, isUsableRange, PracticeEngine } from "./motor";
+import type { AdaptationReport, EngineSnapshot, EngineState, KeyRange, NoteEvent } from "./motor";
+import {
+  DEFAULT_RANGE,
+  describeRange,
+  KEYBOARD_PRESETS,
+  loadRange,
+  presetForKeys,
+  presetForRange,
+  saveRange,
+} from "./keyboardRange";
 import { MidiParseError, parseMidi } from "./midiFile";
 import type { ParsedSong } from "./midiFile";
 import { MidiInput } from "./midiInput";
@@ -20,6 +31,12 @@ const els = {
   demo: $<HTMLButtonElement>("demo"),
   connect: $<HTMLButtonElement>("connect"),
   devices: $<HTMLSelectElement>("devices"),
+  keys: $<HTMLSelectElement>("keys"),
+  calibrate: $<HTMLButtonElement>("calibrate"),
+  adapt: $("adapt"),
+  audio: $<HTMLInputElement>("audio"),
+  audioLabel: $("audioLabel"),
+  volume: $<HTMLInputElement>("volume"),
   lastKey: $("lastKey"),
   message: $("message"),
   songInfo: $("songInfo"),
@@ -45,6 +62,10 @@ const STATE_LABEL: Record<EngineState, string> = {
 };
 
 const stage = new Stage(els.canvas);
+const audio = new SongAudio();
+/** Hay un teclado MIDI físico conectado (el audio solo existe en ese modo). */
+let physicalConnected = false;
+const programByTrack = new Map<number, number>();
 const pressed = new Set<number>();
 const wrongUntil = new Map<number, number>();
 
@@ -75,12 +96,157 @@ function formatDuration(sec: number): string {
 
 function loadSong(next: ParsedSong): void {
   song = next;
+  programByTrack.clear();
+  for (const t of next.tracks) programByTrack.set(t.index, t.program);
   selectedTracks.clear();
   const first = next.tracks[0];
   if (first) selectedTracks.add(first.index);
   renderSongInfo();
   renderTracks();
   rebuildEngine();
+}
+
+// ---------- Audio de la canción (solo con teclado físico) ----------
+
+function playable(n: NoteEvent, program: number, percussion: boolean, maxDuration = Infinity): PlayableNote {
+  return {
+    midi: n.midi,
+    time: n.time,
+    duration: Math.min(n.duration, maxDuration),
+    velocity: n.velocity ?? 0.8,
+    program,
+    percussion,
+  };
+}
+
+/** Acompañamiento: las pistas que no practicas y la batería. */
+function buildBacking(): PlayableNote[] {
+  if (!song) return [];
+  const out: PlayableNote[] = [];
+  for (const t of song.tracks) {
+    if (selectedTracks.has(t.index)) continue;
+    for (const n of t.notes) out.push(playable(n, t.program, false));
+  }
+  for (const t of song.percussion) for (const n of t.notes) out.push(playable(n, 0, true));
+  return out;
+}
+
+function updateAudioControls(): void {
+  const available = physicalConnected && SongAudio.supported();
+  if (!available && audio.enabled) audio.disable();
+  els.audio.disabled = !available;
+  if (!available) els.audio.checked = false;
+  els.volume.disabled = !els.audio.checked;
+  els.audioLabel.title = !SongAudio.supported()
+    ? "Este navegador no admite audio web"
+    : physicalConnected
+      ? "Escucha la canción por las bocinas o audífonos de la computadora"
+      : "Conecta un teclado MIDI para activar el audio";
+}
+
+els.audio.addEventListener("change", async () => {
+  if (els.audio.checked) {
+    try {
+      await audio.enable();
+    } catch {
+      els.audio.checked = false;
+      say("No se pudo activar el audio. Revisa que el navegador permita reproducir sonido.", "error");
+    }
+  } else {
+    audio.disable();
+  }
+  updateAudioControls();
+});
+els.volume.addEventListener("input", () => audio.setVolume(Number(els.volume.value) / 100));
+
+// ---------- Rango del teclado y adaptación de octavas ----------
+
+let keyRange: KeyRange = DEFAULT_RANGE;
+let deviceName: string | null = null;
+
+function renderKeysSelect(): void {
+  els.keys.replaceChildren();
+  for (const p of KEYBOARD_PRESETS) {
+    const label = p.keys === 88 ? "88 teclas (sin adaptar)" : `${p.keys} teclas`;
+    els.keys.append(new Option(label, String(p.keys)));
+  }
+  const preset = presetForRange(keyRange);
+  if (preset) els.keys.value = String(preset.keys);
+  else {
+    els.keys.append(new Option(`Calibrado: ${describeRange(keyRange)}`, "custom"));
+    els.keys.value = "custom";
+  }
+}
+
+function setRange(range: KeyRange, persist: boolean): void {
+  keyRange = range;
+  if (persist) saveRange(deviceName, range);
+  renderKeysSelect();
+  rebuildEngine();
+}
+
+function showAdaptation(report: AdaptationReport): void {
+  if (report.adaptedNotes === 0) {
+    els.adapt.hidden = true;
+    return;
+  }
+  const oct = report.maxOctaves === 1 ? "una octava" : `hasta ${report.maxOctaves} octavas`;
+  const text =
+    `Canción adaptada a tu teclado de ${describeRange(keyRange)}: ` +
+    `${report.adaptedNotes} de ${report.totalNotes} notas se movieron ${oct} ` +
+    `para quedar dentro del rango. El resto no cambió.`;
+  els.adapt.textContent = text;
+  els.adapt.hidden = false;
+}
+
+els.keys.addEventListener("change", () => {
+  const preset = presetForKeys(Number(els.keys.value));
+  if (preset) setRange(preset.range, true);
+});
+
+// Calibración: la Web MIDI API no informa cuántas teclas tiene el piano.
+let calibration: { step: "low" | "high"; low: number } | null = null;
+
+function endCalibration(): void {
+  calibration = null;
+  els.calibrate.textContent = "Calibrar";
+}
+
+els.calibrate.addEventListener("click", () => {
+  if (calibration) {
+    endCalibration();
+    say("Calibración cancelada.", "info");
+    return;
+  }
+  if (engine) {
+    const s = engine.getSnapshot().state;
+    if (s === "running" || s === "waiting") engine.pause();
+  }
+  calibration = { step: "low", low: 0 };
+  els.calibrate.textContent = "Cancelar calibración";
+  say("Calibración: pulsa en tu piano la tecla MÁS GRAVE (la de más a la izquierda).", "info");
+});
+
+function calibrationKey(midi: number): void {
+  if (!calibration) return;
+  if (calibration.step === "low") {
+    calibration = { step: "high", low: midi };
+    say(`Tecla grave: ${noteName(midi)}. Ahora pulsa la tecla MÁS AGUDA (la de más a la derecha).`, "info");
+    return;
+  }
+  const range = { lo: calibration.low, hi: midi };
+  if (!isUsableRange(range)) {
+    say(
+      midi <= calibration.low
+        ? "La tecla aguda debe estar a la derecha de la grave. Pulsa de nuevo la más aguda."
+        : "El rango es demasiado corto (mínimo 12 teclas). Pulsa de nuevo la tecla más aguda.",
+      "error",
+    );
+    return;
+  }
+  endCalibration();
+  setRange(range, true);
+  say(`Teclado calibrado: ${describeRange(range)}.`, "ok");
 }
 
 function renderSongInfo(): void {
@@ -128,13 +294,23 @@ function rebuildEngine(): void {
   engine = null;
   if (!song) return;
 
-  const notes: NoteEvent[] = song.tracks
+  const original: NoteEvent[] = song.tracks
     .filter((t) => selectedTracks.has(t.index))
     .flatMap((t) => t.notes);
 
+  // Las notas fuera del rango físico del teclado se mueven por octavas antes de crear el motor.
+  const { notes, report } = adaptNotesToRange(original, keyRange);
+  showAdaptation(report);
+
   const next = new PracticeEngine(notes);
+  audio.setBacking(buildBacking());
   unsubscribe = next.subscribe((ev) => {
-    if (ev.type === "wrongNote") wrongUntil.set(ev.midi, performance.now() + 350);
+    if (ev.type === "noteMatched") {
+      // La tecla acertada suena con el instrumento de su pista (máx. 3 s).
+      for (const n of ev.group.notes) {
+        if (n.midi === ev.midi) audio.playUser(playable(n, programByTrack.get(n.track ?? -1) ?? 0, false, 3));
+      }
+    } else if (ev.type === "wrongNote") wrongUntil.set(ev.midi, performance.now() + 350);
     else if (ev.type === "finished") {
       const s = next.getSnapshot();
       say(
@@ -180,6 +356,10 @@ els.demo.addEventListener("click", () => loadSong(demoSong()));
 function noteOn(midi: number): void {
   pressed.add(midi);
   els.lastKey.textContent = `Tecla: ${noteName(midi)} (${midi})`;
+  if (calibration) {
+    calibrationKey(midi);
+    return;
+  }
   engine?.noteOn(midi, performance.now());
 }
 
@@ -200,10 +380,22 @@ const midiInput = new MidiInput({
       els.devices.append(new Option("Sin dispositivos", ""));
       els.devices.disabled = true;
       els.connect.textContent = "Conectar piano";
+      physicalConnected = false;
+      updateAudioControls();
       return;
     }
     for (const d of devices) els.devices.append(new Option(d.name, d.id, false, d.id === selectedId));
     els.devices.disabled = false;
+    physicalConnected = selectedId !== null;
+    updateAudioControls();
+
+    // Al cambiar de piano se recupera el rango que se guardó para ese dispositivo.
+    const name = devices.find((d) => d.id === selectedId)?.name ?? null;
+    if (name !== deviceName) {
+      deviceName = name;
+      const saved = name ? loadRange(name) : null;
+      if (saved) setRange(saved, false);
+    }
   },
 });
 
@@ -230,7 +422,10 @@ els.canvas.addEventListener("pointercancel", releasePointer);
 
 // ---------- Controles (RF-07) ----------
 
-els.play.addEventListener("click", togglePlay);
+els.play.addEventListener("click", () => {
+  audio.unlock();
+  togglePlay();
+});
 els.restart.addEventListener("click", () => {
   engine?.reset();
   pressed.clear();
@@ -257,6 +452,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden && engine) {
     const s = engine.getSnapshot().state;
     if (s === "running" || s === "waiting") engine.pause();
+    audio.tick("paused", engine.getSnapshot().time, null);
   }
 });
 
@@ -298,11 +494,15 @@ function updatePanel(snap: EngineSnapshot | null): void {
   els.play.disabled = !engine || state === "finished";
 }
 
+renderKeysSelect();
+updateAudioControls();
+
 // ---------- Bucle de dibujo ----------
 
 function frame(now: number): void {
   engine?.update();
   const snap = engine?.getSnapshot() ?? null;
+  if (snap) audio.tick(snap.state, snap.time, snap.currentGroup?.time ?? null);
   for (const [midi, until] of wrongUntil) if (until <= now) wrongUntil.delete(midi);
   stage.render(snap, pressed, wrongUntil, now);
   updatePanel(snap);

@@ -130,6 +130,7 @@ export class PracticeEngine {
       if (!this.matched.has(midi)) {
         this.matched.set(midi, timestamp);
         if (this.chordStart === null) this.chordStart = timestamp;
+        this.emit({ type: "noteMatched", midi, group });
       }
       if (this.matched.size === group.midis.length) this.completeGroup(group);
     } else {

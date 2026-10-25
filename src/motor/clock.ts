@@ -14,10 +14,10 @@ export class PausableClock {
   private base = 0;
   private startedAt: number | null = null;
   private ceiling = Infinity;
-  private readonly now: () => number
+  private readonly now: () => number;
 
   constructor(now: () => number = () => performance.now()) {
-    this.now = now
+    this.now = now;
   }
 
   get running(): boolean {

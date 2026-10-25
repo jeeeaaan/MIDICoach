@@ -23,6 +23,7 @@ const COLORS = {
 
 /** Dibuja las notas cayendo y el teclado en un solo canvas, a partir del tiempo del motor. */
 export class Stage {
+  private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private w = 1;
   private h = 1;
@@ -34,8 +35,6 @@ export class Stage {
   private range = computeRange([]);
   private keys: KeyRect[] = [];
   private byMidi = new Map<number, KeyRect>();
-
-  private readonly canvas: HTMLCanvasElement;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;

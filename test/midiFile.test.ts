@@ -32,6 +32,10 @@ describe("parseMidi", () => {
     assert.equal(song.bpm, 120);
     assert.equal(song.tracks.length, 2);
     assert.equal(song.totalNotes, 3);
+    // La percusión no se practica, pero se conserva para reproducirla como acompañamiento.
+    assert.equal(song.percussion.length, 1);
+    assert.equal(song.percussion[0]!.percussion, true);
+    assert.equal(song.percussion[0]!.notes[0]!.midi, 36);
 
     const [melody, bass] = song.tracks;
     assert.equal(melody!.name, "Melodía");
@@ -43,6 +47,8 @@ describe("parseMidi", () => {
       ],
     );
     assert.equal(bass!.name, "Pista 2");
+    assert.equal(melody!.program, 0);
+    assert.equal(melody!.percussion, false);
     assert.equal(bass!.notes[0]!.track, bass!.index);
   });
 

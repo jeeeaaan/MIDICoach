@@ -1,6 +1,6 @@
 import * as toneMidi from "@tonejs/midi";
 import type { Midi as MidiType } from "@tonejs/midi";
-import type { NoteEvent } from "./motor/types";
+import type { NoteEvent } from "./motor";
 
 // @tonejs/midi es CommonJS: según el entorno (Vite o Node ESM) `Midi` llega como
 // export nombrado o dentro de `default`.
@@ -15,6 +15,9 @@ export interface ParsedTrack {
   index: number;
   name: string;
   instrument: string;
+  /** Programa General MIDI (0–127) para elegir el timbre al reproducir. */
+  program: number;
+  percussion: boolean;
   noteCount: number;
   notes: NoteEvent[];
 }
@@ -24,8 +27,10 @@ export interface ParsedSong {
   durationSec: number;
   bpm: number | null;
   totalNotes: number;
-  /** Solo pistas con notas melódicas (se omiten las vacías y la percusión). */
+  /** Pistas melódicas con notas: las que se pueden practicar. */
   tracks: ParsedTrack[];
+  /** Pistas de percusión: no se practican, solo suenan como acompañamiento. */
+  percussion: ParsedTrack[];
 }
 
 export class MidiParseError extends Error {
@@ -47,12 +52,16 @@ export function parseMidi(data: ArrayBuffer | Uint8Array, fileName = ""): Parsed
   }
 
   const tracks: ParsedTrack[] = [];
+  const percussion: ParsedTrack[] = [];
   midi.tracks.forEach((t, index) => {
-    if (t.notes.length === 0 || t.instrument.percussion) return;
-    tracks.push({
+    if (t.notes.length === 0) return;
+    const isDrums = t.instrument.percussion;
+    const parsed: ParsedTrack = {
       index,
       name: t.name.trim() || `Pista ${index + 1}`,
       instrument: t.instrument.name,
+      program: t.instrument.number,
+      percussion: isDrums,
       noteCount: t.notes.length,
       notes: t.notes.map((n) => ({
         midi: n.midi,
@@ -61,7 +70,8 @@ export function parseMidi(data: ArrayBuffer | Uint8Array, fileName = ""): Parsed
         velocity: n.velocity,
         track: index,
       })),
-    });
+    };
+    (isDrums ? percussion : tracks).push(parsed);
   });
 
   if (tracks.length === 0) {
@@ -75,5 +85,6 @@ export function parseMidi(data: ArrayBuffer | Uint8Array, fileName = ""): Parsed
     bpm: bpm ? Math.round(bpm) : null,
     totalNotes: tracks.reduce((sum, t) => sum + t.noteCount, 0),
     tracks,
+    percussion,
   };
 }
