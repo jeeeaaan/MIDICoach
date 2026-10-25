@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f1420" />
+    <title>Práctica de piano</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Práctica de piano</h1>
+
+      <div class="group">
+        <label class="btn" for="file">Abrir MIDI</label>
+        <input id="file" type="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden />
+        <button id="demo" class="btn ghost" type="button">Canción de prueba</button>
+      </div>
+
+      <div class="group">
+        <button id="connect" class="btn" type="button">Conectar piano</button>
+        <select id="devices" aria-label="Dispositivo MIDI de entrada" disabled>
+          <option>Sin dispositivos</option>
+        </select>
+        <span id="lastKey" class="pill" title="Última tecla detectada">Tecla: —</span>
+      </div>
+    </header>
+
+    <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+
+    <section class="song" aria-label="Canción">
+      <p id="songInfo" class="song-info">
+        Abre un archivo .mid o prueba la canción de ejemplo para empezar.
+      </p>
+      <div id="tracks" class="tracks" role="group" aria-label="Pistas a practicar"></div>
+    </section>
+
+    <main class="stage">
+      <canvas id="stage" aria-label="Notas de la canción y teclado de piano"></canvas>
+    </main>
+
+    <footer class="panel">
+      <div class="controls">
+        <button id="play" class="btn primary" type="button" disabled>Iniciar</button>
+        <button id="restart" class="btn ghost" type="button" disabled>Reiniciar</button>
+      </div>
+
+      <div class="progress-wrap">
+        <div
+          class="progress"
+          role="progressbar"
+          aria-label="Progreso"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+          id="progress"
+        >
+          <div id="bar"></div>
+        </div>
+        <span id="pct">0 %</span>
+      </div>
+
+      <dl class="stats">
+        <div><dt>Estado</dt><dd id="state">Listo</dd></div>
+        <div><dt>Notas</dt><dd id="done">0 / 0</dd></div>
+        <div><dt>Errores</dt><dd id="errors">0</dd></div>
+        <div class="expected"><dt>Toca</dt><dd id="expected">—</dd></div>
+      </dl>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
