@@ -120,9 +120,11 @@ function playable(n: NoteEvent, program: number, percussion: boolean, maxDuratio
 }
 
 /** Acompañamiento: las pistas que no practicas y la batería. */
-function buildBacking(): PlayableNote[] {
+function buildBacking(omitted: readonly NoteEvent[]): PlayableNote[] {
   if (!song) return [];
   const out: PlayableNote[] = [];
+  // Las notas de tu pista que no caben en el teclado no se esperan, pero siguen sonando con la canción.
+  for (const n of omitted) out.push(playable(n, programByTrack.get(n.track ?? -1) ?? 0, false));
   for (const t of song.tracks) {
     if (selectedTracks.has(t.index)) continue;
     for (const n of t.notes) out.push(playable(n, t.program, false));
@@ -186,15 +188,25 @@ function setRange(range: KeyRange, persist: boolean): void {
 }
 
 function showAdaptation(report: AdaptationReport): void {
-  if (report.adaptedNotes === 0) {
+  if (report.adaptedNotes === 0 && report.omittedNotes === 0) {
     els.adapt.hidden = true;
     return;
   }
-  const oct = report.maxOctaves === 1 ? "una octava" : `hasta ${report.maxOctaves} octavas`;
-  const text =
-    `Canción adaptada a tu teclado de ${describeRange(keyRange)}: ` +
-    `${report.adaptedNotes} de ${report.totalNotes} notas se movieron ${oct} ` +
-    `para quedar dentro del rango. El resto no cambió.`;
+  const parts: string[] = [];
+  if (report.adaptedNotes > 0) {
+    const oct = report.maxOctaves === 1 ? "una octava" : `hasta ${report.maxOctaves} octavas`;
+    parts.push(
+      `${report.transposedParts === 1 ? "una parte" : `${report.transposedParts} partes`} ` +
+        `se transpuso completa (${oct}, ${report.adaptedNotes} notas) para caber en el rango`,
+    );
+  }
+  if (report.omittedNotes > 0) {
+    parts.push(
+      `${report.omittedNotes} de ${report.totalNotes} notas no caben y se omiten ` +
+        `(se ven en rojo, siguen sonando y no detienen la práctica)`,
+    );
+  }
+  const text = `Canción adaptada a tu teclado de ${describeRange(keyRange)}: ${parts.join("; ")}.`;
   els.adapt.textContent = text;
   els.adapt.hidden = false;
 }
@@ -298,12 +310,13 @@ function rebuildEngine(): void {
     .filter((t) => selectedTracks.has(t.index))
     .flatMap((t) => t.notes);
 
-  // Las notas fuera del rango físico del teclado se mueven por octavas antes de crear el motor.
-  const { notes, report } = adaptNotesToRange(original, keyRange);
+  // Cada parte se transpone entera por octavas si cabe; si no, se omiten sus notas imposibles.
+  const { notes, omitted, report } = adaptNotesToRange(original, keyRange);
   showAdaptation(report);
 
   const next = new PracticeEngine(notes);
-  audio.setBacking(buildBacking());
+  audio.setUserPrograms([...selectedTracks].map((i) => programByTrack.get(i) ?? 0));
+  audio.setBacking(buildBacking(omitted));
   unsubscribe = next.subscribe((ev) => {
     if (ev.type === "noteMatched") {
       // La tecla acertada suena con el instrumento de su pista (máx. 3 s).
@@ -322,7 +335,7 @@ function rebuildEngine(): void {
     }
   });
   engine = next;
-  stage.setNotes(notes, next.groups);
+  stage.setNotes(notes, next.groups, omitted);
   els.play.disabled = false;
   els.restart.disabled = false;
 }

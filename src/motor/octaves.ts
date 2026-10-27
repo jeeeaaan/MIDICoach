@@ -1,4 +1,3 @@
-import { groupNotes } from "./chords";
 import type { NoteEvent } from "./types";
 
 /** Rango físico del teclado, en números MIDI, ambos extremos incluidos. */
@@ -9,27 +8,35 @@ export interface KeyRange {
 
 export interface AdaptationReport {
   totalNotes: number;
-  /** Notas cuyo número MIDI cambió (incluye las que se movieron junto con su acorde). */
+  /** Notas cuyo número MIDI cambió porque su parte se transpuso. */
   adaptedNotes: number;
-  totalGroups: number;
-  adaptedGroups: number;
-  /** Grupos que no cabían enteros en el teclado y se adaptaron nota por nota. */
-  foldedGroups: number;
+  /** Notas que no caben en el teclado y se omiten de la práctica. */
+  omittedNotes: number;
+  totalParts: number;
+  /** Partes (pistas) transpuestas completas por octavas. */
+  transposedParts: number;
+  /** Partes a las que se les omitieron notas por no tener una adaptación viable. */
+  partsWithOmissions: number;
   /** Mayor desplazamiento aplicado, en octavas (valor absoluto). */
   maxOctaves: number;
 }
 
 export interface AdaptationResult {
-  /** Mismas notas y mismo orden que la entrada; las movidas llevan `originalMidi`. */
+  /** Notas que se pueden tocar (en el mismo orden relativo que la entrada); las movidas llevan `originalMidi`. */
   notes: NoteEvent[];
+  /** Notas originales imposibles de tocar en este teclado: no se esperan ni bloquean la práctica. */
+  omitted: NoteEvent[];
   report: AdaptationReport;
 }
 
 /**
  * Con 12 teclas consecutivas (11 semitonos de diferencia) existe una posición
- * para cualquier nota: es el mínimo para poder adaptar siempre por octavas.
+ * para cualquier nota: es el mínimo para poder transponer por octavas.
  */
 export const MIN_RANGE_SPAN = 11;
+
+/** Una parte sin transposición viable solo se desplaza si así se tocan al menos tantas notas más. */
+const SHIFT_MIN_PLAYABLE_FRACTION = 0.5;
 
 export function isUsableRange(range: KeyRange): boolean {
   return (
@@ -42,95 +49,121 @@ export function isUsableRange(range: KeyRange): boolean {
 }
 
 /**
- * Adapta las notas de una canción al rango físico de un teclado (solo octavas,
- * así cada nota conserva su nombre: Do sigue siendo Do).
+ * Adapta las notas de una canción al rango físico de un teclado. Se trabaja por
+ * "parte" (una pista = una mano o instrumento), nunca nota por nota, para no
+ * deformar la melodía ni la relación entre las manos:
  *
- * Reglas, en orden:
- *  1. Un grupo (notas simultáneas, mismo criterio que el motor) que ya cabe en el
- *     rango no se toca.
- *  2. Si no cabe, se mueve ENTERO la cantidad mínima de octavas que lo haga caber.
- *     Los intervalos del acorde y su posición relativa no cambian.
- *  3. Si el grupo es más ancho que el teclado, cada nota fuera de rango se mueve
- *     por octavas a la posición válida más cercana. Se conservan los nombres de las
- *     notas, pero el acorde cambia de inversión.
+ *  1. Si todas las notas de la parte caben, no se toca nada.
+ *  2. Si existe un desplazamiento de N octavas con el que TODA la parte cabe, se
+ *     transpone la parte entera (el menor |N|). Intervalos, acordes y ritmo se conservan.
+ *  3. Si no existe, se omiten las notas fuera de rango y las demás no se modifican.
+ *     Solo si en su posición original se tocaría menos de la mitad de la parte y otro
+ *     desplazamiento permite tocar más, se usa ese desplazamiento (y se omite el resto).
  *
- * Como cualquier rango válido contiene las 12 notas, ninguna nota queda sin
- * posición y la práctica no puede bloquearse por teclas inexistentes.
- *
- * `toleranceSec` debe coincidir con la tolerancia de agrupación del motor (30 ms).
+ * Las notas omitidas no están en `notes`, así que el motor no las espera: el tiempo
+ * y la duración de la canción no cambian. Se devuelven en `omitted` para señalarlas
+ * y para que suenen como acompañamiento.
  */
-export function adaptNotesToRange(
-  notes: readonly NoteEvent[],
-  range: KeyRange,
-  toleranceSec = 0.03,
-): AdaptationResult {
+export function adaptNotesToRange(notes: readonly NoteEvent[], range: KeyRange): AdaptationResult {
   if (!isUsableRange(range)) {
     throw new RangeError(
       `Rango de teclado no válido (${range.lo}–${range.hi}): debe abarcar al menos ${MIN_RANGE_SPAN + 1} teclas.`,
     );
   }
   const { lo, hi } = range;
-  const groups = groupNotes(notes, toleranceSec);
-  const replacement = new Map<NoteEvent, NoteEvent>();
 
-  let adaptedGroups = 0;
-  let foldedGroups = 0;
+  const parts = new Map<number, NoteEvent[]>();
+  for (const n of notes) {
+    const key = n.track ?? -1;
+    const list = parts.get(key);
+    if (list) list.push(n);
+    else parts.set(key, [n]);
+  }
+
+  const kept = new Map<NoteEvent, NoteEvent>();
+  const omittedSet = new Set<NoteEvent>();
+  let transposedParts = 0;
+  let partsWithOmissions = 0;
   let maxOctaves = 0;
+  let adaptedNotes = 0;
 
-  for (const group of groups) {
+  for (const part of parts.values()) {
+    const fits = (k: number): number => {
+      let count = 0;
+      for (const n of part) {
+        const m = n.midi + 12 * k;
+        if (m >= lo && m <= hi) count++;
+      }
+      return count;
+    };
+
     let min = Infinity;
     let max = -Infinity;
-    for (const n of group.notes) {
+    for (const n of part) {
       if (n.midi < min) min = n.midi;
       if (n.midi > max) max = n.midi;
     }
-    if (min >= lo && max <= hi) continue;
 
-    adaptedGroups++;
-
-    // Desplazamientos k (en octavas) que dejan el grupo completo dentro del rango.
+    // Desplazamientos que dejan la parte completa dentro; el más cercano a 0.
     const kLow = Math.ceil((lo - min) / 12);
     const kHigh = Math.floor((hi - max) / 12);
-
+    let k = 0;
     if (kLow <= kHigh) {
-      const k = Math.min(Math.max(0, kLow), kHigh); // el más cercano a 0
-      maxOctaves = Math.max(maxOctaves, Math.abs(k));
-      for (const n of group.notes) replacement.set(n, shifted(n, k));
+      k = Math.min(Math.max(0, kLow), kHigh);
     } else {
-      foldedGroups++;
-      for (const n of group.notes) {
-        if (n.midi >= lo && n.midi <= hi) continue;
-        const k = n.midi < lo ? Math.ceil((lo - n.midi) / 12) : -Math.ceil((n.midi - hi) / 12);
-        maxOctaves = Math.max(maxOctaves, Math.abs(k));
-        replacement.set(n, shifted(n, k));
+      // Sin transposición viable: se omite lo imposible. Se mueve la parte solo si
+      // quedaría casi toda fuera del teclado y otro desplazamiento rescata más notas.
+      const atZero = fits(0);
+      if (atZero < part.length * SHIFT_MIN_PLAYABLE_FRACTION) {
+        let best = atZero;
+        for (let c = 1; c <= 10; c++) {
+          for (const cand of [c, -c]) {
+            const f = fits(cand);
+            if (f > best) {
+              best = f;
+              k = cand;
+            }
+          }
+        }
       }
     }
+
+    let omittedHere = 0;
+    for (const n of part) {
+      const m = n.midi + 12 * k;
+      if (m < lo || m > hi) {
+        omittedSet.add(n);
+        omittedHere++;
+      } else if (k !== 0) {
+        kept.set(n, { ...n, midi: m, originalMidi: n.originalMidi ?? n.midi });
+        adaptedNotes++;
+      }
+    }
+    if (k !== 0) {
+      transposedParts++;
+      maxOctaves = Math.max(maxOctaves, Math.abs(k));
+    }
+    if (omittedHere > 0) partsWithOmissions++;
   }
 
-  let adaptedNotes = 0;
-  const out = notes.map((n) => {
-    const r = replacement.get(n);
-    if (r && r.midi !== n.midi) {
-      adaptedNotes++;
-      return r;
-    }
-    return n;
-  });
+  const out: NoteEvent[] = [];
+  const omitted: NoteEvent[] = [];
+  for (const n of notes) {
+    if (omittedSet.has(n)) omitted.push(n);
+    else out.push(kept.get(n) ?? n);
+  }
 
   return {
     notes: out,
+    omitted,
     report: {
       totalNotes: notes.length,
       adaptedNotes,
-      totalGroups: groups.length,
-      adaptedGroups,
-      foldedGroups,
+      omittedNotes: omitted.length,
+      totalParts: parts.size,
+      transposedParts,
+      partsWithOmissions,
       maxOctaves,
     },
   };
-}
-
-function shifted(note: NoteEvent, octaves: number): NoteEvent {
-  if (octaves === 0) return note;
-  return { ...note, midi: note.midi + 12 * octaves, originalMidi: note.originalMidi ?? note.midi };
 }

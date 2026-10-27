@@ -141,6 +141,11 @@ interface Voice {
 
 const MAX_VOICES = 64;
 
+
+/** Un identificador por timbre, para no calentar dos veces programas que suenan igual. */
+const PROGRAM_KEYS = new Map<Timbre, number>();
+for (let p = 127; p >= 0; p--) PROGRAM_KEYS.set(timbreFor(p), p);
+
 /** Curva casi lineal para señales normales que se aplana suavemente en ±0.95. */
 const SOFT_CLIP = (() => {
   const n = 1024;
@@ -170,6 +175,9 @@ export class GmSynth {
   private readonly master: GainNode;
   private readonly voices = new Set<Voice>();
   private noise: AudioBuffer | null = null;
+  /** Destino de las voces nuevas: el master, o un nodo mudo durante el precalentamiento. */
+  private out: AudioNode;
+  private readonly warmed = new Set<string>();
 
   constructor(ctx: BaseAudioContext, volume = 0.7) {
     this.ctx = ctx;
@@ -188,7 +196,39 @@ export class GmSynth {
     this.master.connect(compressor);
     compressor.connect(limiter);
     limiter.connect(ctx.destination);
+    this.out = this.master;
     this.setVolume(volume);
+  }
+
+  /**
+   * Prepara el sintetizador antes de practicar: crea el ruido de la percusión y hace sonar,
+   * en silencio, una nota de cada instrumento. Así el navegador compila los nodos y
+   * reserva los recursos ahora, y no en la primera nota real (que sonaría con retraso).
+   * Es idempotente: cada instrumento se calienta una sola vez.
+   */
+  preload(programs: Iterable<number>, percussion: boolean): void {
+    const mute = this.ctx.createGain();
+    mute.gain.value = 0;
+    mute.connect(this.ctx.destination);
+    const previous = this.out;
+    this.out = mute;
+    try {
+      const when = this.ctx.currentTime;
+      for (const program of programs) {
+        const timbre = timbreFor(program);
+        const key = `p${PROGRAM_KEYS.get(timbre) ?? program}`;
+        if (this.warmed.has(key)) continue;
+        this.warmed.add(key);
+        this.playPitched(when, { midi: 60, time: 0, duration: 0.05, velocity: 0.5, program, percussion: false });
+      }
+      if (percussion && !this.warmed.has("drums")) {
+        this.warmed.add("drums");
+        for (const midi of [36, 38, 42, 46, 45, 49, 51, 37]) this.playDrum(when, midi, 0.5);
+      }
+    } finally {
+      this.out = previous;
+      setTimeout(() => mute.disconnect(), 1500);
+    }
   }
 
   /** Volumen de 0 a 1 (con curva cuadrática para que el control se sienta uniforme). */
@@ -244,7 +284,7 @@ export class GmSynth {
     filter.frequency.value = clamp(freq * timbre.cutoff, 300, 14000);
     filter.Q.value = 0.7;
     filter.connect(gain);
-    gain.connect(this.master);
+    gain.connect(this.out);
 
     const sources: AudioScheduledSourceNode[] = [];
     const nyquist = this.ctx.sampleRate / 2;
@@ -316,7 +356,7 @@ export class GmSynth {
     gain.gain.setValueAtTime(peak, when);
     gain.gain.exponentialRampToValueAtTime(0.0001, when + durSec);
     osc.connect(gain);
-    gain.connect(this.master);
+    gain.connect(this.out);
     osc.start(when);
     this.register({ gain, sources: [osc] }, when + durSec + 0.05);
   }
@@ -338,7 +378,7 @@ export class GmSynth {
     gain.gain.exponentialRampToValueAtTime(0.0001, when + durSec);
     src.connect(filter);
     filter.connect(gain);
-    gain.connect(this.master);
+    gain.connect(this.out);
     src.start(when, Math.random() * 0.05);
     this.register({ gain, sources: [src] }, when + durSec + 0.05, filter);
   }

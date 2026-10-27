@@ -16,6 +16,8 @@ export class SongAudio {
   private backing: PlayableNote[] = [];
   private volume = 0.7;
   private on = false;
+  /** Instrumentos que se usarán en la práctica (acompañamiento y pistas del usuario). */
+  private userPrograms = new Set<number>();
 
   static supported(): boolean {
     return typeof AudioContext !== "undefined";
@@ -35,6 +37,13 @@ export class SongAudio {
     await this.ctx.resume();
     this.on = true;
     this.rebuild();
+    this.preload();
+  }
+
+  /** Instrumentos de las pistas que toca el usuario: se precargan para que su primera nota no se retrase. */
+  setUserPrograms(programs: Iterable<number>): void {
+    this.userPrograms = new Set(programs);
+    this.preload();
   }
 
   disable(): void {
@@ -58,6 +67,7 @@ export class SongAudio {
     this.backing = notes;
     this.synth?.stopAll();
     this.rebuild();
+    this.preload();
   }
 
   tick(state: EngineState, time: number, ceiling: number | null): void {
@@ -68,6 +78,18 @@ export class SongAudio {
   playUser(note: PlayableNote): void {
     if (!this.on || !this.synth || !this.ctx) return;
     this.synth.playNote(this.ctx.currentTime, note);
+  }
+
+  /** Calienta el sintetizador con todos los instrumentos de la canción (no repite lo ya calentado). */
+  private preload(): void {
+    if (!this.on || !this.synth) return;
+    const programs = new Set(this.userPrograms);
+    let percussion = false;
+    for (const n of this.backing) {
+      if (n.percussion) percussion = true;
+      else programs.add(n.program);
+    }
+    this.synth.preload(programs, percussion);
   }
 
   private rebuild(): void {

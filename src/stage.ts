@@ -14,6 +14,8 @@ const COLORS = {
   pending: "#ffb020",
   matched: "#3ddc84",
   wrong: "#ff5a5f",
+  omitted: "rgba(255,90,95,0.3)",
+  adapted: "#ffffff",
   pressed: "#9ad0ff",
   whiteKey: "#f4f6fa",
   blackKey: "#1a1f2b",
@@ -30,6 +32,7 @@ export class Stage {
   private dpr = 1;
 
   private notes: NoteEvent[] = [];
+  private omitted: NoteEvent[] = [];
   private groupOf = new Map<NoteEvent, number>();
   private maxDuration = 0;
   private range = computeRange([]);
@@ -45,9 +48,10 @@ export class Stage {
     this.resize();
   }
 
-  setNotes(notes: readonly NoteEvent[], groups: readonly NoteGroup[]): void {
+  setNotes(notes: readonly NoteEvent[], groups: readonly NoteGroup[], omitted: readonly NoteEvent[] = []): void {
     this.notes = [...notes].sort((a, b) => a.time - b.time);
-    this.maxDuration = this.notes.reduce((m, n) => Math.max(m, n.duration), 0);
+    this.omitted = [...omitted].sort((a, b) => a.time - b.time);
+    this.maxDuration = [...this.notes, ...this.omitted].reduce((m, n) => Math.max(m, n.duration), 0);
     this.groupOf = new Map();
     for (const g of groups) for (const n of g.notes) this.groupOf.set(n, g.index);
     this.range = computeRange(this.notes.map((n) => n.midi));
@@ -128,6 +132,8 @@ export class Stage {
       else hi = mid;
     }
 
+    this.drawOmitted(time, notesH, minStart, pps);
+
     for (let i = lo; i < this.notes.length; i++) {
       const n = this.notes[i]!;
       if (n.time > time + LOOKAHEAD) break;
@@ -146,8 +152,39 @@ export class Stage {
 
       ctx.fillStyle = color;
       this.roundRect(key.x + 1, top, key.w - 2, height - 1.5, 4);
+      if (n.originalMidi !== undefined) {
+        // Nota transpuesta: contorno blanco.
+        ctx.strokeStyle = COLORS.adapted;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(key.x + 1.75, top + 0.75, key.w - 3.5, height - 3);
+      }
     }
     ctx.restore();
+  }
+
+  /** Notas imposibles de tocar: se dibujan en rojo tenue sobre la tecla extrema del lado al que pertenecen. */
+  private drawOmitted(time: number, notesH: number, minStart: number, pps: number): void {
+    const { ctx } = this;
+    let lo = 0;
+    let hi = this.omitted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((this.omitted[mid]?.time ?? 0) < minStart) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < this.omitted.length; i++) {
+      const n = this.omitted[i]!;
+      if (n.time > time + LOOKAHEAD) break;
+      const edge = Math.min(Math.max(n.midi, this.range.lo), this.range.hi);
+      const key = this.byMidi.get(edge);
+      if (!key) continue;
+      const bottom = notesH - (n.time - time) * pps;
+      const height = Math.max(6, n.duration * pps);
+      const top = bottom - height;
+      if (bottom < 0 || top > notesH) continue;
+      ctx.fillStyle = COLORS.omitted;
+      this.roundRect(key.x + 1, top, key.w - 2, height - 1.5, 4);
+    }
   }
 
   private drawKeyboard(
