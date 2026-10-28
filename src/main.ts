@@ -1,5 +1,7 @@
 import "./style.css";
 import type { PlayableNote } from "./audio/backing";
+import { MicInput } from "./audio/micInput";
+import type { MicState } from "./audio/micInput";
 import { SongAudio } from "./audio/songAudio";
 import { demoSong } from "./demo";
 import { adaptNotesToRange, isUsableRange, PracticeEngine } from "./motor";
@@ -33,6 +35,12 @@ const els = {
   devices: $<HTMLSelectElement>("devices"),
   keys: $<HTMLSelectElement>("keys"),
   calibrate: $<HTMLButtonElement>("calibrate"),
+  inputMode: $<HTMLSelectElement>("inputMode"),
+  micBar: $("micBar"),
+  micStatus: $("micStatus"),
+  micNote: $("micNote"),
+  micStop: $<HTMLButtonElement>("micStop"),
+  micTolerance: $<HTMLSelectElement>("micTolerance"),
   settingsBtn: $<HTMLButtonElement>("settingsBtn"),
   settings: $("settings"),
   help: $("help"),
@@ -138,14 +146,17 @@ function buildBacking(omitted: readonly NoteEvent[]): PlayableNote[] {
 }
 
 function updateAudioControls(): void {
-  const available = physicalConnected && SongAudio.supported();
+  // Con el micrófono el audio de la canción queda apagado: las bocinas se oirían en el micrófono.
+  const available = physicalConnected && SongAudio.supported() && inputMode === "midi";
   if (!available && audio.enabled) audio.disable();
   els.audio.disabled = !available;
   if (!available) els.audio.checked = false;
   els.volume.disabled = !els.audio.checked;
   els.audioLabel.title = !SongAudio.supported()
     ? "Este navegador no admite audio web"
-    : physicalConnected
+    : inputMode === "mic"
+      ? "No disponible con el micrófono (evita el eco)"
+      : physicalConnected
       ? "Escucha la canción por las bocinas o audífonos de la computadora"
       : "Conecta un teclado MIDI para activar el audio";
 }
@@ -370,6 +381,7 @@ els.demo.addEventListener("click", () => loadSong(demoSong()));
 
 // ---------- Piano (RF-03) ----------
 
+/** Teclas del piano MIDI o del teclado en pantalla. En modo micrófono no avanzan la práctica. */
 function noteOn(midi: number): void {
   pressed.add(midi);
   els.lastKey.textContent = `Tecla: ${noteName(midi)} (${midi})`;
@@ -377,8 +389,74 @@ function noteOn(midi: number): void {
     calibrationKey(midi);
     return;
   }
-  engine?.noteOn(midi, performance.now());
+  if (inputMode === "midi") engine?.noteOn(midi, performance.now());
 }
+
+// ---------- Micrófono (experimental) ----------
+
+type InputMode = "midi" | "mic";
+let inputMode: InputMode = "midi";
+
+const MIC_STATE_CLASS: Record<MicState, string> = {
+  off: "",
+  starting: "",
+  listening: "listening",
+  error: "error",
+};
+
+const mic = new MicInput({
+  onNote: (midi) => {
+    // Mismo motor y misma validación que el piano MIDI; solo cambia la fuente de la nota.
+    if (inputMode !== "mic" || calibration || !engine) return;
+    pressed.add(midi);
+    window.setTimeout(() => pressed.delete(midi), 250);
+    engine.noteOn(midi, performance.now());
+  },
+  onDetected: (midi) => {
+    els.micNote.textContent = `Se oye: ${midi === null ? "—" : noteName(midi)}`;
+  },
+  onState: (state, message) => {
+    els.micStatus.textContent = message;
+    els.micStatus.className = `pill mic-status ${MIC_STATE_CLASS[state]}`;
+    if (state === "error" && inputMode === "mic") {
+      setInputMode("midi");
+      say(message, "error");
+    }
+  },
+});
+
+function setInputMode(mode: InputMode): void {
+  if (mode === inputMode) return;
+  inputMode = mode;
+  els.inputMode.value = mode;
+  els.micBar.hidden = mode !== "mic";
+  pressed.clear();
+  updateAudioControls();
+  if (mode === "mic") {
+    if (calibration) endCalibration();
+    if (engine) {
+      const s = engine.getSnapshot().state;
+      if (s === "running" || s === "waiting") engine.pause();
+    }
+    void mic.start();
+  } else {
+    mic.stop();
+    els.micNote.textContent = "Se oye: —";
+  }
+}
+
+if (!MicInput.supported()) {
+  const option = els.inputMode.querySelector<HTMLOptionElement>('option[value="mic"]');
+  if (option) {
+    option.disabled = true;
+    option.title = "Este navegador no permite usar el micrófono";
+  }
+}
+els.inputMode.addEventListener("change", () => setInputMode(els.inputMode.value === "mic" ? "mic" : "midi"));
+els.micStop.addEventListener("click", () => setInputMode("midi"));
+els.micTolerance.addEventListener("change", () => mic.setToleranceCents(Number(els.micTolerance.value)));
+// Libera el micrófono al cerrar o recargar la página.
+window.addEventListener("pagehide", () => mic.stop());
 
 function noteOff(midi: number): void {
   pressed.delete(midi);

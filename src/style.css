@@ -215,6 +215,37 @@ a.btn {
   font-size: 13px;
 }
 
+.mic-bar {
+  margin: 8px 16px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: rgba(74, 163, 255, 0.1);
+}
+
+.mic-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mic-status.listening {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.mic-status.error {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.mic-bar .hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .help {
   flex: 1;
   overflow-y: auto;
@@ -518,5 +549,8 @@ input[type="range"] {
   }
   .help {
     padding: 12px;
+  }
+  .mic-bar {
+    margin: 6px 12px 0;
   }
 }

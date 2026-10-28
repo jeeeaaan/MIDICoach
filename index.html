@@ -25,6 +25,14 @@
         <select id="devices" aria-label="Dispositivo MIDI de entrada" title="Teclado MIDI que se usa para practicar" disabled>
           <option>Sin dispositivos</option>
         </select>
+        <select
+          id="inputMode"
+          aria-label="Entrada de notas"
+          title="Cómo tocas: con un teclado MIDI o con el micrófono (experimental)"
+        >
+          <option value="midi">Teclado MIDI</option>
+          <option value="mic">Micrófono (experimental)</option>
+        </select>
       </div>
 
       <div class="group audio-control" role="group" aria-label="Audio">
@@ -71,6 +79,18 @@
               Calibrar
             </button>
             <p class="hint">Calibrar mide el rango real de tu piano pulsando su tecla más grave y la más aguda.</p>
+            <label class="field">
+              <span>Tolerancia del micrófono</span>
+              <select
+                id="micTolerance"
+                aria-label="Tolerancia de afinación del micrófono"
+                title="Cuánto puede desafinar tu piano respecto a la nota exacta (100 cents = un semitono)"
+              >
+                <option value="20">Estricta (±20 cents)</option>
+                <option value="35" selected>Normal (±35 cents)</option>
+                <option value="45">Amplia (±45 cents)</option>
+              </select>
+            </label>
             <div class="field">
               <span>Última tecla detectada</span>
               <span id="lastKey" class="pill" title="Última tecla detectada">Tecla: —</span>
@@ -84,6 +104,20 @@
     </header>
 
     <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+
+    <section id="micBar" class="mic-bar" aria-label="Micrófono" hidden>
+      <div class="mic-row">
+        <span id="micStatus" class="pill mic-status" role="status" aria-live="polite">Micrófono desactivado</span>
+        <span id="micNote" class="pill" title="Nota que se oye ahora">Se oye: —</span>
+        <button id="micStop" class="btn ghost" type="button" title="Apaga el micrófono y vuelve al teclado MIDI">
+          Detener micrófono
+        </button>
+      </div>
+      <p class="hint">
+        Experimental: funciona mejor en un lugar silencioso y con una nota a la vez. Puede fallar con acordes,
+        música de fondo o ruido. Con el micrófono, el audio de la canción se desactiva para evitar eco.
+      </p>
+    </section>
 
     <section class="song" aria-label="Canción" id="songView">
       <p id="songInfo" class="song-info">
@@ -141,7 +175,8 @@
           <a href="#ayuda-controles">Controles</a>
           <a href="#ayuda-modos">Modos de práctica</a>
           <a href="#ayuda-rango">Rango y calibración</a>
-          <a href="#ayuda-audio">Audio</a>
+          <a href="#ayuda-microfono">Micrófono</a>
+                    <a href="#ayuda-audio">Audio</a>
           <a href="#ayuda-progreso">Progreso y errores</a>
           <a href="#ayuda-problemas">Problemas</a>
           <a href="#ayuda-faq">Preguntas frecuentes</a>
@@ -180,6 +215,10 @@
             <dd></dd>Carga un archivo MIDI de tu computadora. Úsalo cada vez que quieras practicar otra canción.</dd>
             <dt>Canción de prueba</dt>
             <dd>Carga una canción corta incluida en la aplicación, para probar sin buscar un archivo.</dd>
+            <dt>Entrada de notas</dt>
+            <dd>Elige cómo tocas: <em>Teclado MIDI</em> o <em>Micrófono (experimental)</em>. Solo una entrada avanza la práctica a la vez.</dd>
+            <dt>Detener micrófono / Tolerancia del micrófono</dt>
+            <dd>Detener apaga el micrófono y vuelve al teclado MIDI. La tolerancia (en Ajustes) es cuánto puede desafinar la nota; si tu piano acústico está algo desafinado, usa «Amplia».</dd>
             <dt>Conectar piano</dt>
             <dd>Pide permiso al navegador para usar tu teclado MIDI. Solo hace falta una vez por sesión.</dd>
             <dt>Lista de dispositivos</dt>
@@ -256,6 +295,24 @@
           </p>
         </section>
 
+        <section id="ayuda-microfono">
+          <h3>Modo micrófono (experimental)</h3>
+          <p>
+            Permite practicar con un piano acústico o digital sin conexión MIDI. Elige <em>Micrófono</em> en
+            <em>Entrada de notas</em>; el navegador pedirá permiso para usar el micrófono en ese momento.
+          </p>
+          <ul>
+            <li>Detecta <strong>una nota a la vez</strong>. No reconoce acordes: un acorde no se podrá completar.</li>
+            <li>La canción avanza cuando la nota que oye coincide con la esperada. Una nota equivocada cuenta como error.</li>
+            <li>Una nota sostenida cuenta una sola vez; para repetir la misma nota, vuelve a pulsar la tecla.</li>
+            <li>Detecta aproximadamente de Si1 a Do7. Las notas más graves o más agudas no se reconocen.</li>
+            <li>Funciona mejor en un lugar silencioso, con el micrófono cerca del piano y sin música de fondo. Con ruido puede fallar o registrar errores falsos.</li>
+            <li>Tarda un poco más en responder que un teclado MIDI y es menos fiable.</li>
+            <li>En este modo el audio de la canción está desactivado y el teclado MIDI no avanza la práctica.</li>
+            <li>Para apagarlo, pulsa <em>Detener micrófono</em> o vuelve a <em>Teclado MIDI</em>.</li>
+          </ul>
+        </section>
+
         <section id="ayuda-audio">
           <h3>Audio de la canción</h3>
           <ul>
@@ -287,6 +344,8 @@
           <dl class="help-list">
             <dt>No se detecta mi piano</dt>
             <dd>Usa Chrome o Edge en una computadora. Comprueba que el piano esté encendido y conectado por USB, acepta el permiso del navegador, pulsa <em>Conectar piano</em> otra vez y cierra otros programas que usen el piano.</dd>
+            <dt>El micrófono no reconoce mis notas</dt>
+            <dd>Acepta el permiso del navegador, acerca el micrófono al piano, baja el ruido de fondo, toca una nota a la vez y prueba la tolerancia «Amplia» en Ajustes. Si la canción tiene acordes, usa un teclado MIDI. Mira «Se oye»: si no cambia, no llega sonido.</dd>
             <dt>No se oye nada</dt>
             <dd>Conecta el piano y marca <em>Audio</em>. Revisa el volumen de la aplicación y del equipo. Si el piano tiene sonido propio, no es el que oyes aquí: esta aplicación suena por las bocinas o audífonos de la computadora.</dd>
             <dt>La canción no avanza</dt>
@@ -305,7 +364,7 @@
             <dt>¿Se admiten partituras o audio (MP3, PDF)?</dt>
             <dd>No, solo archivos MIDI.</dd>
             <dt>¿Qué necesito para usar la aplicación?</dt>
-            <dd>Un navegador moderno con Web MIDI (Chrome o Edge en computadora) y un teclado MIDI por USB. Sin piano puedes usar el teclado en pantalla, sin audio de la canción.</dd>
+            <dd>Un navegador moderno con Web MIDI (Chrome o Edge en computadora) y un teclado MIDI por USB. Sin piano MIDI puedes usar el micrófono (experimental) o el teclado en pantalla, sin audio de la canción.</dd>
             <dt>¿Se envía mi archivo a algún servidor?</dt>
             <dd>No: el archivo se lee en tu navegador.</dd>
             <dt>¿Se guarda mi progreso?</dt>
