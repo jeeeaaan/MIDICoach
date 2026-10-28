@@ -10,41 +10,82 @@
     <header class="topbar">
       <h1>MIDICoach</h1>
 
-      <div class="group">
-        <label class="btn" for="file">Abrir MIDI</label>
+      <div class="group" role="group" aria-label="Canción">
+        <label class="btn" for="file" title="Abre un archivo .mid o .midi de tu computadora">Abrir MIDI</label>
         <input id="file" type="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden />
-        <button id="demo" class="btn ghost" type="button">Canción de prueba</button>
+        <button id="demo" class="btn ghost" type="button" title="Carga una canción corta incluida en la aplicación">
+          Canción de prueba
+        </button>
       </div>
 
-      <div class="group">
-        <button id="connect" class="btn" type="button">Conectar piano</button>
-        <select id="devices" aria-label="Dispositivo MIDI de entrada" disabled>
+      <div class="group" role="group" aria-label="Piano">
+        <button id="connect" class="btn" type="button" title="Pide permiso al navegador y conecta tu teclado MIDI">
+          Conectar piano
+        </button>
+        <select id="devices" aria-label="Dispositivo MIDI de entrada" title="Teclado MIDI que se usa para practicar" disabled>
           <option>Sin dispositivos</option>
         </select>
-        <select id="keys" aria-label="Tamaño del teclado"></select>
-        <button
-          id="calibrate"
-          class="btn ghost"
-          type="button"
-          title="Pulsa la tecla más grave y luego la más aguda de tu piano"
-        >
-          Calibrar
-        </button>
-        <span id="lastKey" class="pill" title="Última tecla detectada">Tecla: —</span>
       </div>
 
-      <div class="group">
+      <div class="group audio-control" role="group" aria-label="Audio">
         <label id="audioLabel" class="toggle" title="Conecta un teclado MIDI para activar el audio">
           <input id="audio" type="checkbox" disabled />
-          <span>Audio de la canción</span>
+          <span>Audio</span>
         </label>
-        <input id="volume" type="range" min="0" max="100" value="70" aria-label="Volumen" disabled />
+        <input
+          id="volume"
+          type="range"
+          min="0"
+          max="100"
+          value="70"
+          aria-label="Volumen"
+          title="Volumen del audio de la canción"
+          disabled
+        />
+      </div>
+
+      <div class="group tools">
+        <div class="settings-wrap">
+          <button
+            id="settingsBtn"
+            class="btn ghost"
+            type="button"
+            aria-expanded="false"
+            aria-controls="settings"
+            title="Tamaño del teclado y calibración"
+          >
+            <span aria-hidden="true">⚙</span>&nbsp;Ajustes
+          </button>
+          <div id="settings" class="settings" role="dialog" aria-label="Ajustes del teclado" hidden>
+            <h2>Teclado</h2>
+            <label class="field">
+              <span>Tamaño del teclado</span>
+              <select id="keys" aria-label="Tamaño del teclado" title="Número de teclas de tu piano"></select>
+            </label>
+            <button
+              id="calibrate"
+              class="btn ghost"
+              type="button"
+              title="Pulsa la tecla más grave y luego la más aguda de tu piano"
+            >
+              Calibrar
+            </button>
+            <p class="hint">Calibrar mide el rango real de tu piano pulsando su tecla más grave y la más aguda.</p>
+            <div class="field">
+              <span>Última tecla detectada</span>
+              <span id="lastKey" class="pill" title="Última tecla detectada">Tecla: —</span>
+            </div>
+          </div>
+        </div>
+        <a id="helpLink" class="btn help-btn" href="#ayuda" title="Guía de uso" aria-label="Ayuda">
+          <span aria-hidden="true">?</span>&nbsp;Ayuda
+        </a>
       </div>
     </header>
 
     <div id="message" class="message" role="status" aria-live="polite" hidden></div>
 
-    <section class="song" aria-label="Canción">
+    <section class="song" aria-label="Canción" id="songView">
       <p id="songInfo" class="song-info">
         Abre un archivo .mid o prueba la canción de ejemplo para empezar.
       </p>
@@ -52,17 +93,17 @@
       <div id="tracks" class="tracks" role="group" aria-label="Pistas a practicar"></div>
     </section>
 
-    <main class="stage">
+    <main class="stage" id="stageView">
       <canvas id="stage" aria-label="Notas de la canción y teclado de piano"></canvas>
     </main>
 
-    <footer class="panel">
+    <footer class="panel" id="panelView">
       <div class="controls">
-        <button id="play" class="btn primary" type="button" disabled>Iniciar</button>
-        <button id="restart" class="btn ghost" type="button" disabled>Reiniciar</button>
+        <button id="play" class="btn primary" type="button" title="Inicia, pausa o reanuda la práctica (barra espaciadora)" disabled>Iniciar</button>
+        <button id="restart" class="btn ghost" type="button" title="Vuelve a la primera nota y borra errores y progreso" disabled>Reiniciar</button>
       </div>
 
-      <div class="progress-wrap">
+      <div class="progress-wrap" title="Porcentaje de notas completadas">
         <div
           class="progress"
           role="progressbar"
@@ -78,12 +119,201 @@
       </div>
 
       <dl class="stats">
-        <div><dt>Estado</dt><dd id="state">Listo</dd></div>
-        <div><dt>Notas</dt><dd id="done">0 / 0</dd></div>
-        <div><dt>Errores</dt><dd id="errors">0</dd></div>
-        <div class="expected"><dt>Toca</dt><dd id="expected">—</dd></div>
+        <div title="Estado de la práctica"><dt>Estado</dt><dd id="state">Listo</dd></div>
+        <div title="Notas completadas / total de notas"><dt>Notas</dt><dd id="done">0 / 0</dd></div>
+        <div title="Teclas equivocadas desde el inicio"><dt>Errores</dt><dd id="errors">0</dd></div>
+        <div class="expected" title="Nota o acorde que debes tocar ahora"><dt>Toca</dt><dd id="expected">—</dd></div>
       </dl>
     </footer>
+
+    <section id="help" class="help" aria-labelledby="helpTitle" hidden>
+      <article class="help-body">
+        <div class="help-head">
+          <h2 id="helpTitle">Guía de uso</h2>
+          <a id="helpBack" class="btn primary" href="#">← Volver a la práctica</a>
+        </div>
+        <p class="help-note">
+          Tu práctica no se pierde al abrir la ayuda: se queda en pausa y puedes reanudarla al volver.
+        </p>
+
+        <nav class="help-toc" aria-label="Contenido">
+          <a href="#ayuda-inicio">Primeros pasos</a>
+          <a href="#ayuda-controles">Controles</a>
+          <a href="#ayuda-modos">Modos de práctica</a>
+          <a href="#ayuda-rango">Rango y calibración</a>
+          <a href="#ayuda-audio">Audio</a>
+          <a href="#ayuda-progreso">Progreso y errores</a>
+          <a href="#ayuda-problemas">Problemas</a>
+          <a href="#ayuda-faq">Preguntas frecuentes</a>
+        </nav>
+
+        <section id="ayuda-inicio">
+          <h3>Primeros pasos</h3>
+          <ol>
+            <li>
+              <strong>Conecta tu piano.</strong> Enciende tu teclado MIDI, conéctalo por USB y pulsa
+              <em>Conectar piano</em>. El navegador pedirá permiso: acéptalo. El teclado aparecerá en la lista de
+              dispositivos.
+            </li>
+            <li>
+              <strong>Abre una canción.</strong> Pulsa <em>Abrir MIDI</em> y elige un archivo
+              <code>.mid</code> o <code>.midi</code>. Si solo quieres probar, usa <em>Canción de prueba</em>.
+            </li>
+            <li>
+              <strong>Elige qué practicar.</strong> Marca las pistas que quieres tocar (por ejemplo, una por cada mano).
+            </li>
+            <li>
+              <strong>Pulsa <em>Iniciar</em>.</strong> Las notas caen hacia el teclado. Cuando llegan abajo, la canción
+              espera a que toques la tecla correcta.
+            </li>
+          </ol>
+          <p>
+            Sin piano también puedes probar: haz clic o toca las teclas del teclado dibujado en pantalla. El audio de
+            la canción solo está disponible con un piano conectado.
+          </p>
+        </section>
+
+        <section id="ayuda-controles">
+          <h3>Controles de la interfaz</h3>
+          <dl class="help-list">
+            <dt>Abrir MIDI</dt>
+            <dd></dd>Carga un archivo MIDI de tu computadora. Úsalo cada vez que quieras practicar otra canción.</dd>
+            <dt>Canción de prueba</dt>
+            <dd>Carga una canción corta incluida en la aplicación, para probar sin buscar un archivo.</dd>
+            <dt>Conectar piano</dt>
+            <dd>Pide permiso al navegador para usar tu teclado MIDI. Solo hace falta una vez por sesión.</dd>
+            <dt>Lista de dispositivos</dt>
+            <dd>Muestra los teclados MIDI detectados. Cámbiala si tienes más de uno conectado.</dd>
+            <dt>Audio (casilla)</dt>
+            <dd>Activa o desactiva el sonido de la canción. Solo se habilita con un piano conectado.</dd>
+            <dt>Volumen (barra)</dt>
+            <dd>Sube o baja el volumen del audio de la canción. Se habilita cuando el audio está activado.</dd>
+            <dt>Ajustes</dt>
+            <dd>Abre un panel con el tamaño del teclado, la calibración y la última tecla detectada.</dd>
+            <dt>Tamaño del teclado (en Ajustes)</dt>
+            <dd>Indica cuántas teclas tiene tu piano (25, 37, 49, 61, 76 u 88). Úsalo para que la canción se adapte a tu piano.</dd>
+            <dt>Calibrar (en Ajustes)</dt>
+            <dd>Mide el rango exacto de tu piano. Úsalo si tu teclado no coincide con ninguno de los tamaños de la lista.</dd>
+            <dt>Última tecla detectada (en Ajustes)</dt>
+            <dd>Muestra la última tecla que pulsaste. Sirve para comprobar que el piano responde.</dd>
+            <dt>Pistas (casillas bajo el título)</dt>
+            <dd>Eligen qué partes de la canción vas a tocar. Las que no marques suenan solas como acompañamiento (si el audio está activado). Siempre debe quedar al menos una.</dd>
+            <dt>Iniciar / Pausar / Reanudar</dt>
+            <dd>Controla la práctica. También funciona la barra espaciadora.</dd>
+            <dt>Reiniciar</dt>
+            <dd>Vuelve a la primera nota y borra el progreso y los errores.</dd>
+            <dt>Ayuda</dt>
+            <dd>Abre esta guía. Con <em>Volver a la práctica</em> regresas donde estabas.</dd>
+          </dl>
+        </section>
+
+        <section id="ayuda-modos">
+          <h3>Modos de práctica</h3>
+          <p>
+            La aplicación practica por <strong>pistas</strong>. En muchas canciones, una pista es la mano derecha
+            (melodía) y otra la mano izquierda (acompañamiento), pero depende de cada archivo: los nombres vienen del MIDI.
+          </p>
+          <ul>
+            <li><strong>Mano derecha o izquierda:</strong> marca solo la pista de esa mano. Las demás pistas suenan como acompañamiento.</li>
+            <li><strong>Ambas manos:</strong> marca las dos pistas. Se tocan juntas, como una sola secuencia de notas.</li>
+            <li>
+              <strong>Notas:</strong> la canción se detiene en cada nota y espera a que pulses esa tecla. Si pulsas otra
+              tecla, cuenta como error y sigue esperando.
+            </li>
+            <li>
+              <strong>Acordes:</strong> las notas que suenan casi a la vez (en un margen de unos 30 milisegundos) forman
+              un acorde. Debes pulsar todas sus teclas dentro de un margen corto (unos 150 ms) desde la primera
+              acertada; si tardas más, el acorde se reinicia y lo intentas de nuevo.
+            </li>
+            <li>Si pulsas una tecla mucho antes de que llegue su nota (más de 0,2 s), se ignora y no cuenta como error.</li>
+          </ul>
+        </section>
+
+        <section id="ayuda-rango">
+          <h3>Rango del teclado y calibración</h3>
+          <p>
+            Los pianos tienen distinto número de teclas y algunas canciones usan notas que tu teclado no tiene. Para
+            esto, elige tu tamaño en <em>Ajustes</em> o usa <em>Calibrar</em>.
+          </p>
+          <ol>
+            <li>Abre <em>Ajustes</em> y pulsa <em>Calibrar</em>.</li>
+            <li>Pulsa la tecla <strong>más grave</strong> (la de más a la izquierda).</li>
+            <li>Pulsa la tecla <strong>más aguda</strong> (la de más a la derecha).</li>
+          </ol>
+          <p>El rango se guarda para ese piano y se recupera la próxima vez. El mínimo es de 12 teclas.</p>
+          <p><strong>Cómo se adapta la canción</strong> (cada pista por separado):</p>
+          <ul>
+            <li>Si la pista cabe en tu teclado, no se cambia nada.</li>
+            <li>Si no cabe pero subiéndola o bajándola por octavas completas sí cabe, se mueve <strong>entera</strong>. Las notas conservan su nombre y la relación entre ellas.</li>
+            <li>
+              Si ningún desplazamiento sirve, las notas que no existen en tu piano se <strong>omiten</strong>: no tienes
+              que tocarlas, la canción no las espera y siguen sonando si el audio está activado.
+            </li>
+          </ul>
+          <p>
+            Las notas omitidas se dibujan en rojo tenue y las notas movidas de octava tienen un contorno blanco. Un
+            aviso sobre las pistas resume cuántas notas se movieron u omitieron.
+          </p>
+        </section>
+
+        <section id="ayuda-audio">
+          <h3>Audio de la canción</h3>
+          <ul>
+            <li>Conecta un piano para habilitar la casilla <em>Audio</em>; sin piano permanece desactivada.</li>
+            <li>Con el audio activado oyes el acompañamiento (pistas que no practicas y batería) y tus notas acertadas.</li>
+            <li>El acompañamiento sigue el ritmo de la práctica: se detiene cuando la canción espera tu nota y se pausa contigo.</li>
+            <li>La barra <em>Volumen</em> regula el nivel. Para silenciar por completo, desmarca <em>Audio</em>.</li>
+            <li>El sonido se genera en el navegador, con aproximaciones de los instrumentos; no usa un banco de sonidos real.</li>
+          </ul>
+        </section>
+
+        <section id="ayuda-progreso">
+          <h3>Progreso y errores</h3>
+          <ul>
+            <li><strong>Barra de progreso:</strong> porcentaje de notas completadas.</li>
+            <li><strong>Notas:</strong> notas completadas sobre el total de las pistas elegidas (sin contar las omitidas).</li>
+            <li><strong>Errores:</strong> veces que pulsaste una tecla incorrecta. La tecla se marca en rojo un instante.</li>
+            <li><strong>Toca:</strong> la nota o acorde que debes tocar ahora; también se resalta en el teclado.</li>
+            <li>
+              <strong>Estado:</strong> <em>Listo</em> (sin empezar), <em>Reproduciendo</em> (las notas avanzan),
+              <em>Esperando tu nota</em> (la canción espera), <em>En pausa</em> y <em>Completada</em>.
+            </li>
+            <li>La práctica se pausa sola si cambias de pestaña, abres la ayuda o inicias la calibración.</li>
+          </ul>
+        </section>
+
+        <section id="ayuda-problemas">
+          <h3>Solución de problemas</h3>
+          <dl class="help-list">
+            <dt>No se detecta mi piano</dt>
+            <dd>Usa Chrome o Edge en una computadora. Comprueba que el piano esté encendido y conectado por USB, acepta el permiso del navegador, pulsa <em>Conectar piano</em> otra vez y cierra otros programas que usen el piano.</dd>
+            <dt>No se oye nada</dt>
+            <dd>Conecta el piano y marca <em>Audio</em>. Revisa el volumen de la aplicación y del equipo. Si el piano tiene sonido propio, no es el que oyes aquí: esta aplicación suena por las bocinas o audífonos de la computadora.</dd>
+            <dt>La canción no avanza</dt>
+            <dd>Mira el estado: si dice <em>Esperando tu nota</em>, toca la nota que indica <em>Toca</em>. Si dice <em>En pausa</em>, pulsa <em>Reanudar</em>. Comprueba en Ajustes que la última tecla detectada cambie al tocar.</dd>
+            <dt>Las notas no coinciden con mis teclas</dt>
+            <dd>Revisa el tamaño del teclado en Ajustes o calibra de nuevo.</dd>
+
+          </dl>
+        </section>
+
+        <section id="ayuda-faq">
+          <h3>Preguntas frecuentes</h3>
+          <dl class="help-list">
+            <dt>¿Qué archivos puedo abrir?</dt>
+            <dd>Archivos MIDI estándar con extensión <code>.mid</code> o <code>.midi</code>. Deben tener al menos una pista con notas melódicas. La batería no se practica: solo suena como acompañamiento.</dd>
+            <dt>¿Se admiten partituras o audio (MP3, PDF)?</dt>
+            <dd>No, solo archivos MIDI.</dd>
+            <dt>¿Qué necesito para usar la aplicación?</dt>
+            <dd>Un navegador moderno con Web MIDI (Chrome o Edge en computadora) y un teclado MIDI por USB. Sin piano puedes usar el teclado en pantalla, sin audio de la canción.</dd>
+            <dt>¿Se envía mi archivo a algún servidor?</dt>
+            <dd>No: el archivo se lee en tu navegador.</dd>
+            <dt>¿Se guarda mi progreso?</dt>
+            <dd>No. Solo se recuerda el rango de teclado de cada piano.</dd>
+          </dl>
+        </section>
+      </article>
+    </section>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -33,6 +33,10 @@ const els = {
   devices: $<HTMLSelectElement>("devices"),
   keys: $<HTMLSelectElement>("keys"),
   calibrate: $<HTMLButtonElement>("calibrate"),
+  settingsBtn: $<HTMLButtonElement>("settingsBtn"),
+  settings: $("settings"),
+  help: $("help"),
+  practiceViews: [$("songView"), $("stageView"), $("panelView")],
   adapt: $("adapt"),
   audio: $<HTMLInputElement>("audio"),
   audioLabel: $("audioLabel"),
@@ -454,11 +458,61 @@ function togglePlay(): void {
 }
 
 window.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && e.target === document.body) {
+  if (e.code === "Space" && e.target === document.body && !helpOpen) {
     e.preventDefault();
     togglePlay();
   }
 });
+
+// ---------- Ajustes y ayuda ----------
+
+function setSettingsOpen(open: boolean): void {
+  els.settings.hidden = !open;
+  els.settingsBtn.setAttribute("aria-expanded", String(open));
+}
+els.settingsBtn.addEventListener("click", () => setSettingsOpen(Boolean(els.settings.hidden)));
+document.addEventListener("pointerdown", (e) => {
+  const target = e.target as Node;
+  if (!els.settings.hidden && !els.settings.contains(target) && !els.settingsBtn.contains(target)) {
+    setSettingsOpen(false);
+  }
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !els.settings.hidden) {
+    setSettingsOpen(false);
+    els.settingsBtn.focus();
+  }
+});
+
+/** La ayuda es otra vista de la misma página (#ayuda...): la práctica sigue en memoria, en pausa. */
+let helpOpen = false;
+function syncView(): void {
+  const wantHelp = location.hash.startsWith("#ayuda");
+  if (wantHelp && !helpOpen) {
+    helpOpen = true;
+    setSettingsOpen(false);
+    if (calibration) {
+      endCalibration();
+      say("Calibración cancelada.", "info");
+    }
+    if (engine) {
+      const s = engine.getSnapshot().state;
+      if (s === "running" || s === "waiting") engine.pause();
+    }
+    pressed.clear();
+  } else if (!wantHelp && helpOpen) {
+    helpOpen = false;
+  }
+  els.help.hidden = !wantHelp;
+  for (const v of els.practiceViews) v.hidden = wantHelp;
+  if (wantHelp) {
+    const section = location.hash === "#ayuda" ? null : document.getElementById(location.hash.slice(1));
+    if (section) section.scrollIntoView();
+    else els.help.scrollTop = 0;
+  }
+}
+window.addEventListener("hashchange", syncView);
+syncView();
 
 // Al ocultar la pestaña se pausa para no perder el compás.
 document.addEventListener("visibilitychange", () => {
