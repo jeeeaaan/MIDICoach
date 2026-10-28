@@ -462,6 +462,7 @@ function noteOff(midi: number): void {
   pressed.delete(midi);
 }
 
+let lastSelectedDevice: string | null = null;
 const midiInput = new MidiInput({
   onNoteOn: (midi) => noteOn(midi),
   onNoteOff: (midi) => noteOff(midi),
@@ -470,6 +471,11 @@ const midiInput = new MidiInput({
     els.connect.textContent = kind === "ok" ? "Piano conectado" : "Conectar piano";
   },
   onDevices: (devices, selectedId) => {
+    // Al cambiar o perder el piano no llegarán sus Note Off: se sueltan las teclas marcadas.
+    if (selectedId !== lastSelectedDevice) {
+      lastSelectedDevice = selectedId;
+      pressed.clear();
+    }
     els.devices.replaceChildren();
     if (devices.length === 0) {
       els.devices.append(new Option("Sin dispositivos", ""));
@@ -479,6 +485,7 @@ const midiInput = new MidiInput({
       updateAudioControls();
       return;
     }
+    if (selectedId === null) els.devices.append(new Option("Elige un dispositivo", "", true, true));
     for (const d of devices) els.devices.append(new Option(d.name, d.id, false, d.id === selectedId));
     els.devices.disabled = false;
     physicalConnected = selectedId !== null;

@@ -9,6 +9,8 @@ import { GmSynth } from "./synth";
  *    del motor, así que se detiene cuando la canción espera tu nota;
  *  - las notas que tocas bien suenan con el instrumento de tu pista.
  */
+const SUSPEND_DELAY_MS = 250;
+
 export class SongAudio {
   private ctx: AudioContext | null = null;
   private synth: GmSynth | null = null;
@@ -16,6 +18,7 @@ export class SongAudio {
   private backing: PlayableNote[] = [];
   private volume = 0.7;
   private on = false;
+  private seq = 0;
   /** Instrumentos que se usarán en la práctica (acompañamiento y pistas del usuario). */
   private userPrograms = new Set<number>();
 
@@ -34,7 +37,10 @@ export class SongAudio {
       this.ctx = new AudioContext({ latencyHint: "interactive" });
       this.synth = new GmSynth(this.ctx, this.volume);
     }
+    const seq = ++this.seq;
     await this.ctx.resume();
+    // Si se desactivó (o se volvió a activar) mientras esperaba, esta llamada ya no vale.
+    if (seq !== this.seq) return;
     this.on = true;
     this.rebuild();
     this.preload();
@@ -47,9 +53,16 @@ export class SongAudio {
   }
 
   disable(): void {
+    this.seq++;
     this.on = false;
     this.synth?.stopAll();
     this.scheduler = null;
+    // Con el audio apagado el contexto no debe seguir consumiendo CPU. Se suspende cuando
+    // termina el fundido de stopAll (suspender antes dejaría las voces sonando al reanudar).
+    const ctx = this.ctx;
+    setTimeout(() => {
+      if (!this.on && ctx && ctx.state === "running") void ctx.suspend().catch(() => undefined);
+    }, SUSPEND_DELAY_MS);
   }
 
   /** Reanuda el contexto si el navegador lo suspendió; llamar desde clics de la interfaz. */
