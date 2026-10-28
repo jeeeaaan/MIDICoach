@@ -1,7 +1,18 @@
 import type { EngineState } from "../motor";
 import { BackingScheduler } from "./backing";
 import type { PlayableNote } from "./backing";
+import { PianoSampler } from "./pianoSampler";
+import type { PianoState } from "./pianoSampler";
 import { GmSynth } from "./synth";
+
+export interface SongAudioOptions {
+  /** Carpeta de las muestras de piano. Sin ella solo suena el sintetizador. */
+  pianoBaseUrl?: string;
+  /** Inyectable para pruebas. */
+  fetchFn?: (url: string) => Promise<Response>;
+  /** Avisa de la carga del piano de muestras (para mostrarlo en la interfaz). */
+  onPianoState?: (state: PianoState, message: string) => void;
+}
 
 /**
  * Audio de la canción durante la práctica:
@@ -21,6 +32,17 @@ export class SongAudio {
   private seq = 0;
   /** Instrumentos que se usarán en la práctica (acompañamiento y pistas del usuario). */
   private userPrograms = new Set<number>();
+  private sampler: PianoSampler | null = null;
+  private readonly options: SongAudioOptions;
+
+  constructor(options: SongAudioOptions = {}) {
+    this.options = options;
+  }
+
+  /** Estado del piano de muestras ("idle" si no está configurado o aún no se activó el audio). */
+  get pianoState(): PianoState {
+    return this.sampler?.state ?? "idle";
+  }
 
   static supported(): boolean {
     return typeof AudioContext !== "undefined";
@@ -36,7 +58,15 @@ export class SongAudio {
     if (!this.ctx) {
       this.ctx = new AudioContext({ latencyHint: "interactive" });
       this.synth = new GmSynth(this.ctx, this.volume);
+      const { pianoBaseUrl, fetchFn, onPianoState } = this.options;
+      if (pianoBaseUrl) {
+        this.sampler = new PianoSampler(this.ctx, { baseUrl: pianoBaseUrl, fetchFn, onState: onPianoState });
+        this.synth.setPiano(this.sampler);
+      }
     }
+    // La carga no bloquea: hasta que termina, el piano suena con el sintetizador.
+    // Es idempotente, y tras un error se reintenta al volver a activar el audio.
+    void this.sampler?.load();
     const seq = ++this.seq;
     await this.ctx.resume();
     // Si se desactivó (o se volvió a activar) mientras esperaba, esta llamada ya no vale.

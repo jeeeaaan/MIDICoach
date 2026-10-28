@@ -74,7 +74,11 @@ const STATE_LABEL: Record<EngineState, string> = {
 };
 
 const stage = new Stage(els.canvas);
-const audio = new SongAudio();
+const audio = new SongAudio({
+  // Piano de muestras (Salamander Grand Piano, CC BY 3.0), servido desde public/ y por tanto local.
+  pianoBaseUrl: `${import.meta.env.BASE_URL}samples/salamander/`,
+  onPianoState: (state, message) => say(message, state === "ready" ? "ok" : "info"),
+});
 /** Hay un teclado MIDI físico conectado (el audio solo existe en ese modo). */
 let physicalConnected = false;
 const programByTrack = new Map<number, number>();

@@ -5,13 +5,14 @@ import type { PlayableNote } from "../src/audio/backing";
 
 // ---- AudioContext simulado: cuenta nodos y llamadas, no produce sonido ----
 
-const stats = { contexts: 0, oscillators: 0, sources: 0, stops: 0, suspends: 0, resumes: 0, gains: 0 };
+const stats = { contexts: 0, oscillators: 0, sources: 0, stops: 0, suspends: 0, resumes: 0, gains: 0, samples: 0, rates: [] as number[] };
 
 function param() {
   return {
     value: 0,
     setValueAtTime() {},
     exponentialRampToValueAtTime() {},
+    linearRampToValueAtTime() {},
     setTargetAtTime() {},
     cancelScheduledValues() {},
     cancelAndHoldAtTime() {},
@@ -24,6 +25,10 @@ function node(kind: string): unknown {
     disconnect() {},
     start() {
       if (kind === "osc" || kind === "buf") stats.sources++;
+      if (kind === "buf" && (own.buffer as { isSample?: boolean } | undefined)?.isSample) {
+        stats.samples++;
+        stats.rates.push((own.playbackRate as { value: number }).value);
+      }
     },
     stop() {
       stats.stops++;
@@ -70,6 +75,9 @@ class FakeAudioContext {
     if (resumeGate) await resumeGate;
     this.state = "running";
   }
+  async decodeAudioData() {
+    return { isSample: true, duration: 2 };
+  }
   async suspend() {
     stats.suspends++;
     this.state = "suspended";
@@ -91,7 +99,10 @@ describe("SongAudio: ciclo de vida", () => {
   beforeEach(() => {
     original = g.AudioContext;
     g.AudioContext = FakeAudioContext;
-    for (const k of Object.keys(stats) as Array<keyof typeof stats>) stats[k] = 0;
+    for (const k of Object.keys(stats) as Array<keyof typeof stats>) {
+      if (k === "rates") stats.rates = [];
+      else stats[k] = 0;
+    }
     resumeGate = null;
   });
   afterEach(() => {
@@ -191,5 +202,151 @@ describe("SongAudio: ciclo de vida", () => {
     const warm = stats.oscillators;
     a.tick("running", 0.95, 5);
     assert.ok(stats.oscillators > warm, "la nota de acompañamiento se programó");
+  });
+});
+
+// ---- piano de muestras integrado ----
+
+describe("SongAudio: piano de muestras", () => {
+  const g = globalThis as unknown as { AudioContext?: unknown };
+  let original: unknown;
+  beforeEach(() => {
+    original = g.AudioContext;
+    g.AudioContext = FakeAudioContext;
+    for (const k of Object.keys(stats) as Array<keyof typeof stats>) {
+      if (k === "rates") stats.rates = [];
+      else stats[k] = 0;
+    }
+    resumeGate = null;
+  });
+  afterEach(() => {
+    g.AudioContext = original;
+  });
+
+  const okResponse = { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) } as unknown as Response;
+  const flush = () => sleep(10);
+
+  function make(fetchFn: (u: string) => Promise<Response> = async () => okResponse) {
+    const states: string[] = [];
+    let fetches = 0;
+    const a = new SongAudio({
+      pianoBaseUrl: "/samples/",
+      fetchFn: async (u) => (fetches++, fetchFn(u)),
+      onPianoState: (s) => states.push(s),
+    });
+    return { a, states, fetches: () => fetches };
+  }
+
+  it("sin pianoBaseUrl no se descarga nada y el piano usa el sintetizador", async () => {
+    const a = new SongAudio();
+    await a.enable();
+    a.playUser(piano(0));
+    assert.equal(a.pianoState, "idle");
+    assert.equal(stats.samples, 0);
+  });
+
+  it("el audio se activa sin esperar a las muestras; el piano suena sintetizado hasta que están listas", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { a, states } = make(async () => (await gate, okResponse));
+    await a.enable(); // no se queda esperando la descarga
+    assert.equal(a.enabled, true);
+    assert.equal(a.pianoState, "loading");
+    const osc = stats.oscillators;
+    a.playUser(piano(0));
+    assert.ok(stats.oscillators > osc, "mientras carga usa el sintetizador");
+    assert.equal(stats.samples, 0);
+    release();
+    await flush();
+    assert.equal(a.pianoState, "ready");
+    assert.deepEqual(states, ["loading", "ready"]);
+  });
+
+  it("con las muestras listas, el piano usa muestras (con el cambio de tono correcto) y no osciladores", async () => {
+    const { a } = make();
+    await a.enable();
+    await flush();
+    const osc = stats.oscillators;
+    a.playUser({ ...piano(0), midi: 60 }); // C4: muestra propia
+    a.playUser({ ...piano(0), midi: 61 }); // C#4: un semitono más agudo que C4
+    assert.equal(stats.oscillators, osc);
+    assert.ok(stats.samples >= 2);
+    const last2 = stats.rates.slice(-2);
+    assert.equal(last2[0], 1);
+    assert.ok(Math.abs(last2[1]! - 2 ** (1 / 12)) < 1e-9);
+  });
+
+  it("los demás instrumentos siguen sintetizados aunque el piano esté cargado", async () => {
+    const { a } = make();
+    await a.enable();
+    await flush();
+    const samples = stats.samples;
+    const osc = stats.oscillators;
+    a.playUser({ ...piano(0), program: 40 });
+    assert.equal(stats.samples, samples);
+    assert.ok(stats.oscillators > osc);
+  });
+
+  it("si la descarga falla, el audio sigue funcionando con el sintetizador y se avisa", async () => {
+    const { a, states } = make(async () => ({ ok: false, status: 404 }) as Response);
+    await a.enable();
+    await flush();
+    assert.equal(a.pianoState, "error");
+    assert.equal(states.at(-1), "error");
+    const osc = stats.oscillators;
+    a.playUser(piano(0));
+    assert.ok(stats.oscillators > osc);
+    assert.equal(a.enabled, true);
+  });
+
+  it("desactivar y reactivar no vuelve a descargar; tras un error, reactivar reintenta", async () => {
+    const ok = make();
+    await ok.a.enable();
+    await flush();
+    const n = ok.fetches();
+    ok.a.disable();
+    await ok.a.enable();
+    await flush();
+    assert.equal(ok.fetches(), n);
+
+    let fail = true;
+    const retry = make(async () => (fail ? ({ ok: false, status: 500 } as Response) : okResponse));
+    await retry.a.enable();
+    await flush();
+    assert.equal(retry.a.pianoState, "error");
+    fail = false;
+    retry.a.disable();
+    await retry.a.enable();
+    await flush();
+    assert.equal(retry.a.pianoState, "ready");
+  });
+
+  it("desactivar detiene las voces de muestras y no deja sonar nada más", async () => {
+    const { a } = make();
+    await a.enable();
+    await flush();
+    a.playUser(piano(0));
+    a.setBacking([{ ...piano(1), midi: 48 }]);
+    a.tick("running", 0.95, 5); // programa la nota de acompañamiento (muestra)
+    const stops = stats.stops;
+    a.disable();
+    assert.ok(stats.stops > stops, "stopAll detiene las voces de muestra");
+    const samples = stats.samples;
+    a.playUser(piano(0));
+    assert.equal(stats.samples, samples, "con el audio apagado no suena nada");
+  });
+
+  it("pausar silencia las notas de muestra y al reanudar no se pierden ni repiten", async () => {
+    const { a } = make();
+    await a.enable();
+    await flush();
+    a.setBacking([{ ...piano(1), midi: 48 }, { ...piano(2), midi: 50 }]);
+    a.tick("running", 0.95, 5);
+    const first = stats.samples;
+    const stops = stats.stops;
+    a.tick("paused", 0.97, null);
+    assert.ok(stats.stops > stops, "la pausa detiene lo programado");
+    a.tick("running", 0.97, 5);
+    assert.equal(stats.samples, first + 1, "la nota que no llegó a sonar se reprograma una sola vez");
   });
 });

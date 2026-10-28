@@ -1,4 +1,5 @@
 import type { PlayableNote } from "./backing";
+import type { PianoSampler } from "./pianoSampler";
 
 interface Partial {
   type: OscillatorType;
@@ -141,6 +142,14 @@ interface Voice {
 
 const MAX_VOICES = 64;
 
+/** Programas General MIDI que se tocan con el piano de muestras: pianos de cola, brillante, eléctrico de cola y honky-tonk. */
+export function isSampledPiano(program: number): boolean {
+  return program >= 0 && program <= 3;
+}
+
+/** Cola de relajación (s) al soltar una nota de piano de muestras: la amortiguación del martillo. */
+const SAMPLE_RELEASE_SEC = 0.25;
+
 
 /** Un identificador por timbre, para no calentar dos veces programas que suenan igual. */
 const PROGRAM_KEYS = new Map<Timbre, number>();
@@ -178,6 +187,7 @@ export class GmSynth {
   /** Destino de las voces nuevas: el master, o un nodo mudo durante el precalentamiento. */
   private out: AudioNode;
   private readonly warmed = new Set<string>();
+  private piano: PianoSampler | null = null;
 
   constructor(ctx: BaseAudioContext, volume = 0.7) {
     this.ctx = ctx;
@@ -231,6 +241,11 @@ export class GmSynth {
     }
   }
 
+  /** Piano de muestras opcional: mientras no esté listo (o si falla) suena el timbre sintetizado. */
+  setPiano(sampler: PianoSampler | null): void {
+    this.piano = sampler;
+  }
+
   /** Volumen de 0 a 1 (con curva cuadrática para que el control se sienta uniforme). */
   setVolume(volume: number): void {
     const v = clamp(volume, 0, 1);
@@ -252,7 +267,35 @@ export class GmSynth {
 
   // ---- instrumentos con altura ----
 
+  private playSample(when: number, note: PlayableNote, buffer: AudioBuffer, rate: number): void {
+    const vel = clamp(note.velocity, 0.05, 1);
+    const peak = 0.5 * (0.2 + 0.8 * vel ** 1.5);
+    const end = when + Math.max(note.duration, 0.05);
+
+    const gain = this.ctx.createGain();
+    const g = gain.gain;
+    g.setValueAtTime(0.0001, when);
+    g.linearRampToValueAtTime(peak, when + 0.003); // evita el chasquido del primer frame
+    g.setValueAtTime(peak, end); // la muestra ya trae su propio decaimiento natural
+    g.setTargetAtTime(0.0001, end, SAMPLE_RELEASE_SEC / 3);
+
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = rate;
+    src.connect(gain);
+    gain.connect(this.out);
+    src.start(when);
+    this.register({ gain, sources: [src] }, end + SAMPLE_RELEASE_SEC + 0.05);
+  }
+
   private playPitched(when: number, note: PlayableNote): void {
+    if (isSampledPiano(note.program)) {
+      const picked = this.piano?.pick(note.midi);
+      if (picked) {
+        this.playSample(when, note, picked.sample, picked.rate);
+        return;
+      }
+    }
     const timbre = timbreFor(note.program);
     const freq = 440 * 2 ** ((note.midi - 69) / 12);
     const vel = clamp(note.velocity, 0.05, 1);

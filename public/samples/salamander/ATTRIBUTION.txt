@@ -1,0 +1,19 @@
+Salamander Grand Piano V3 (Yamaha C5)
+Author: Alexander Holm
+Source: https://archive.org/details/SalamanderGrandPianoV3
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+         https://creativecommons.org/licenses/by/3.0/
+         (full legal code: LICENSE-CC-BY-3.0.txt, same folder)
+
+Files in this folder: 30 mp3 recordings (A0, C8 and A/C/Ds/Fs of octaves 1-7), copied
+unmodified from the mp3 versions published by the Tone.js project:
+https://github.com/Tonejs/audio/tree/master/salamander
+(README-original.txt is the author's original README, which states "Licence: CC-by".)
+
+Changes made to the original work (CC BY 3.0, section 3(b)): the recordings were
+converted from the original 48 kHz / 24-bit multi-velocity-layer set to a single
+velocity layer in 128 kbps mp3 (by the Tone.js project, not by this application). At
+playback, this application changes the playback rate (at most +/-1.5 semitones) to
+obtain notes between the recorded ones, and applies its own volume envelope.
+
+The original author does not endorse this application.

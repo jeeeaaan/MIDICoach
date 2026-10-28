@@ -180,6 +180,7 @@
           <a href="#ayuda-progreso">Progreso y errores</a>
           <a href="#ayuda-problemas">Problemas</a>
           <a href="#ayuda-faq">Preguntas frecuentes</a>
+                    <a href="#ayuda-creditos">Créditos</a>
         </nav>
 
         <section id="ayuda-inicio">
@@ -320,7 +321,14 @@
             <li>Con el audio activado oyes el acompañamiento (pistas que no practicas y batería) y tus notas acertadas.</li>
             <li>El acompañamiento sigue el ritmo de la práctica: se detiene cuando la canción espera tu nota y se pausa contigo.</li>
             <li>La barra <em>Volumen</em> regula el nivel. Para silenciar por completo, desmarca <em>Audio</em>.</li>
-            <li>El sonido se genera en el navegador, con aproximaciones de los instrumentos; no usa un banco de sonidos real.</li>
+            <li>
+              Al activar el audio se descarga y prepara el sonido de piano (unos 2 MB, queda en tu equipo). Mientras
+              carga, o si falla, el piano suena con un sonido sintetizado más básico.
+            </li>
+            <li>
+              Solo los pianos (instrumentos 1 a 4 del estándar General MIDI) usan grabaciones. Los demás instrumentos y
+              la batería siguen siendo sonidos sintetizados, aproximaciones de los reales.
+            </li>
           </ul>
         </section>
 
@@ -370,6 +378,16 @@
             <dt>¿Se guarda mi progreso?</dt>
             <dd>No. Solo se recuerda el rango de teclado de cada piano.</dd>
           </dl>
+        </section>
+        <section id="ayuda-creditos">
+          <h3>Créditos</h3>
+          <p>
+            Sonido de piano: <em>Salamander Grand Piano V3</em> de Alexander Holm
+            (<a href="https://archive.org/details/SalamanderGrandPianoV3" target="_blank" rel="noopener">archive.org</a>),
+            licencia
+            <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">Creative Commons Atribución 3.0 (CC BY 3.0)</a>.
+            Se utilizan 30 grabaciones MP3 de la versión distribuida por Tone.js, con una sola capa de intensidad. Las notas intermedias se generan modificando la velocidad de reproducción. El autor original no avala ni respalda esta aplicación.
+          </p>
         </section>
       </article>
     </section>
