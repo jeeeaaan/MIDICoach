@@ -20,6 +20,7 @@ import type { ParsedSong } from "./midiFile";
 import { MidiInput } from "./midiInput";
 import type { StatusKind } from "./midiInput";
 import { noteName } from "./noteNames";
+import { registerServiceWorker } from "./pwa";
 import { Stage } from "./stage";
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -671,4 +672,17 @@ if (!MidiInput.supported()) {
     "Este navegador no admite Web MIDI; podrás usar el teclado en pantalla. Para un piano real usa Chrome o Edge.",
     "info",
   );
+}
+
+// ---------- PWA: uso sin conexión ----------
+// Solo en la versión compilada: en desarrollo no existe sw.js y una caché estorbaría al editar.
+if (import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    void registerServiceWorker({
+      swUrl: `${import.meta.env.BASE_URL}sw.js`,
+      onOfflineReady: () =>
+        say("Mi Piano ya puede abrirse sin conexión. El sonido de piano solo estará disponible si ya lo cargaste.", "ok"),
+      onUpdateReady: () => say("Hay una versión nueva de Mi Piano. Se usará al recargar la página.", "info"),
+    });
+  });
 }
