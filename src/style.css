@@ -408,6 +408,11 @@ input[type="range"] {
   background: rgba(74, 163, 255, 0.16);
 }
 
+.chip:has(input:disabled) {
+  opacity: 0.7;
+  cursor: default;
+}
+
 .chip small {
   color: var(--muted);
 }
@@ -443,7 +448,20 @@ input[type="range"] {
 
 .controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.mode-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.mode-control select {
+  min-width: 112px;
 }
 
 .progress-wrap {
@@ -468,6 +486,12 @@ input[type="range"] {
   width: 0%;
   background: var(--ok);
   transition: width 0.15s ease-out;
+}
+
+.progress-wrap .seek {
+  flex: 1;
+  width: auto;
+  min-width: 0;
 }
 
 #pct {
@@ -552,5 +576,32 @@ input[type="range"] {
   }
   .mic-bar {
     margin: 6px 12px 0;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .topbar {
+    gap: 4px 12px;
+    padding: 4px 12px;
+  }
+  .song {
+    padding: 4px 12px 0;
+  }
+  .song-info {
+    margin-bottom: 4px;
+  }
+  .tracks {
+    gap: 4px;
+  }
+  .chip {
+    padding: 3px 8px;
+  }
+  .stage {
+    min-height: 120px;
+    margin: 4px 12px;
+  }
+  .panel {
+    gap: 6px 16px;
+    padding: 4px 12px 6px;
   }
 }

@@ -105,6 +105,27 @@ describe("BackingScheduler", () => {
     assert.equal(r.played[1]!.time, 1);
   });
 
+  it("al buscar silencia, recoloca el cursor y no duplica la nota del destino", () => {
+    const r = recorder();
+    const s = new BackingScheduler([note(1), note(2)], r.sink);
+    s.tick("running", 0.95, null);
+    assert.deepEqual(r.played.map((p) => p.time), [1]);
+
+    s.seek(1);
+    assert.equal(r.stops(), 1);
+    s.tick("paused", 1, null);
+    s.tick("running", 1, null);
+    s.tick("running", 1.01, null);
+    assert.deepEqual(r.played.map((p) => p.time), [1, 1]);
+    assert.equal(r.played[1]!.delay, 0);
+
+    s.seek(2);
+    s.tick("running", 2, null);
+    s.tick("running", 2.01, null);
+    assert.deepEqual(r.played.map((p) => p.time), [1, 1, 2]);
+    assert.equal(r.played[2]!.delay, 0);
+  });
+
   it("omite las notas que llegan demasiado tarde en vez de hacerlas sonar desfasadas", () => {
     const r = recorder();
     const s = new BackingScheduler([note(1), note(1.4)], r.sink);

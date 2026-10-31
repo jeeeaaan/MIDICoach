@@ -4,7 +4,7 @@ import { MicInput } from "./audio/micInput";
 import type { MicState } from "./audio/micInput";
 import { SongAudio } from "./audio/songAudio";
 import { demoSong } from "./demo";
-import { adaptNotesToRange, isUsableRange, PracticeEngine } from "./motor";
+import { adaptNotesToRange, isUsableRange, ListenEngine, PracticeEngine } from "./motor";
 import type { AdaptationReport, EngineSnapshot, EngineState, KeyRange, NoteEvent } from "./motor";
 import {
   DEFAULT_RANGE,
@@ -55,9 +55,11 @@ const els = {
   songInfo: $("songInfo"),
   tracks: $("tracks"),
   canvas: $<HTMLCanvasElement>("stage"),
+  mode: $<HTMLSelectElement>("mode"),
   play: $<HTMLButtonElement>("play"),
   restart: $<HTMLButtonElement>("restart"),
   progress: $("progress"),
+  seek: $<HTMLInputElement>("seek"),
   bar: $("bar"),
   pct: $("pct"),
   state: $("state"),
@@ -80,15 +82,18 @@ const audio = new SongAudio({
   pianoBaseUrl: `${import.meta.env.BASE_URL}samples/salamander/`,
   onPianoState: (state, message) => say(message, state === "ready" ? "ok" : "info"),
 });
-/** Hay un teclado MIDI físico conectado (el audio solo existe en ese modo). */
+/** Hay un teclado MIDI físico conectado (necesario para el audio durante la práctica). */
 let physicalConnected = false;
 const programByTrack = new Map<number, number>();
 const pressed = new Set<number>();
 const wrongUntil = new Map<number, number>();
 
+type AppMode = "practice" | "listen";
+
 let song: ParsedSong | null = null;
 const selectedTracks = new Set<number>();
-let engine: PracticeEngine | null = null;
+let mode: AppMode = "practice";
+let engine: PracticeEngine | ListenEngine | null = null;
 let unsubscribe: (() => void) | null = null;
 
 // ---------- Mensajes ----------
@@ -123,7 +128,7 @@ function loadSong(next: ParsedSong): void {
   rebuildEngine();
 }
 
-// ---------- Audio de la canción (solo con teclado físico) ----------
+// ---------- Audio de la canción ----------
 
 function playable(n: NoteEvent, program: number, percussion: boolean, maxDuration = Infinity): PlayableNote {
   return {
@@ -150,20 +155,30 @@ function buildBacking(omitted: readonly NoteEvent[]): PlayableNote[] {
   return out;
 }
 
+function buildListenBacking(): PlayableNote[] {
+  if (!song) return [];
+  const out: PlayableNote[] = [];
+  for (const t of song.tracks) for (const n of t.notes) out.push(playable(n, t.program, false));
+  for (const t of song.percussion) for (const n of t.notes) out.push(playable(n, 0, true));
+  return out;
+}
+
 function updateAudioControls(): void {
-  // Con el micrófono el audio de la canción queda apagado: las bocinas se oirían en el micrófono.
-  const available = physicalConnected && SongAudio.supported() && inputMode === "midi";
+  const available =
+    SongAudio.supported() && (mode === "listen" || (physicalConnected && inputMode === "midi"));
   if (!available && audio.enabled) audio.disable();
   els.audio.disabled = !available;
   if (!available) els.audio.checked = false;
   els.volume.disabled = !els.audio.checked;
   els.audioLabel.title = !SongAudio.supported()
     ? "Este navegador no admite audio web"
-    : inputMode === "mic"
-      ? "No disponible con el micrófono (evita el eco)"
-      : physicalConnected
-      ? "Escucha la canción por las bocinas o audífonos de la computadora"
-      : "Conecta un teclado MIDI para activar el audio";
+    : mode === "listen"
+      ? "Escucha todas las pistas por las bocinas o audífonos, sin necesidad de un piano MIDI"
+      : inputMode === "mic"
+        ? "No disponible con el micrófono (evita el eco)"
+        : physicalConnected
+          ? "Escucha la canción por las bocinas o audífonos de la computadora"
+          : "Conecta un teclado MIDI para activar el audio";
 }
 
 els.audio.addEventListener("change", async () => {
@@ -223,7 +238,9 @@ function showAdaptation(report: AdaptationReport): void {
   if (report.omittedNotes > 0) {
     parts.push(
       `${report.omittedNotes} de ${report.totalNotes} notas no caben y se omiten ` +
-        `(se ven en rojo, siguen sonando y no detienen la práctica)`,
+        (mode === "listen"
+          ? "(se ven en rojo y siguen sonando con su altura original)"
+          : "(se ven en rojo, siguen sonando y no detienen la práctica)"),
     );
   }
   const text = `Canción adaptada a tu teclado de ${describeRange(keyRange)}: ${parts.join("; ")}.`;
@@ -323,42 +340,86 @@ function renderTracks(): void {
 
 function rebuildEngine(): void {
   unsubscribe?.();
+  unsubscribe = null;
   engine = null;
   if (!song) return;
 
   const original: NoteEvent[] = song.tracks
-    .filter((t) => selectedTracks.has(t.index))
+    .filter((t) => mode === "listen" || selectedTracks.has(t.index))
     .flatMap((t) => t.notes);
 
   // Cada parte se transpone entera por octavas si cabe; si no, se omiten sus notas imposibles.
   const { notes, omitted, report } = adaptNotesToRange(original, keyRange);
   showAdaptation(report);
 
-  const next = new PracticeEngine(notes);
-  audio.setUserPrograms([...selectedTracks].map((i) => programByTrack.get(i) ?? 0));
-  audio.setBacking(buildBacking(omitted));
-  unsubscribe = next.subscribe((ev) => {
-    if (ev.type === "noteMatched") {
-      // La tecla acertada suena con el instrumento de su pista (máx. 3 s).
-      for (const n of ev.group.notes) {
-        if (n.midi === ev.midi) audio.playUser(playable(n, programByTrack.get(n.track ?? -1) ?? 0, false, 3));
+  let next: PracticeEngine | ListenEngine;
+  if (mode === "listen") {
+    next = new ListenEngine(notes, song.durationSec);
+    audio.setUserPrograms([]);
+    audio.setBacking(buildListenBacking());
+  } else {
+    const practice = new PracticeEngine(notes);
+    next = practice;
+    audio.setUserPrograms([...selectedTracks].map((i) => programByTrack.get(i) ?? 0));
+    audio.setBacking(buildBacking(omitted));
+    unsubscribe = practice.subscribe((ev) => {
+      if (ev.type === "noteMatched") {
+        // La tecla acertada suena con el instrumento de su pista (máx. 3 s).
+        for (const n of ev.group.notes) {
+          if (n.midi === ev.midi) audio.playUser(playable(n, programByTrack.get(n.track ?? -1) ?? 0, false, 3));
+        }
+      } else if (ev.type === "wrongNote") wrongUntil.set(ev.midi, performance.now() + 350);
+      else if (ev.type === "finished") {
+        const s = practice.getSnapshot();
+        say(
+          s.errors === 0
+            ? "¡Canción completada sin errores!"
+            : `¡Canción completada! Errores: ${s.errors}.`,
+          "ok",
+        );
       }
-    } else if (ev.type === "wrongNote") wrongUntil.set(ev.midi, performance.now() + 350);
-    else if (ev.type === "finished") {
-      const s = next.getSnapshot();
-      say(
-        s.errors === 0
-          ? "¡Canción completada sin errores!"
-          : `¡Canción completada! Errores: ${s.errors}.`,
-        "ok",
-      );
-    }
-  });
+    });
+  }
   engine = next;
   stage.setNotes(notes, next.groups, omitted);
   els.play.disabled = false;
   els.restart.disabled = false;
+  updateModeControls();
 }
+
+function updateModeControls(): void {
+  els.mode.value = mode;
+  els.progress.hidden = mode === "listen";
+  els.seek.hidden = mode !== "listen";
+  els.seek.disabled = mode !== "listen" || !song;
+  els.seek.max = String(song?.durationSec ?? 0);
+  const micOption = els.inputMode.querySelector<HTMLOptionElement>('option[value="mic"]');
+  if (micOption) micOption.disabled = mode === "listen" || !MicInput.supported();
+  els.progress.parentElement?.setAttribute(
+    "title",
+    mode === "listen" ? "Posición y porcentaje de la duración de la canción" : "Porcentaje de notas completadas",
+  );
+  for (const box of els.tracks.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+    box.disabled = mode === "listen";
+    box.closest("label")?.setAttribute(
+      "title",
+      mode === "listen" ? "Las pistas se seleccionan solo para Practicar; Escuchar muestra y reproduce todas" : "Pista que quieres practicar",
+    );
+  }
+}
+
+function setMode(next: AppMode): void {
+  if (next === mode) return;
+  if (next === "listen" && inputMode === "mic") setInputMode("midi");
+  mode = next;
+  pressed.clear();
+  wrongUntil.clear();
+  updateModeControls();
+  rebuildEngine();
+  updateAudioControls();
+}
+
+els.mode.addEventListener("change", () => setMode(els.mode.value === "listen" ? "listen" : "practice"));
 
 async function openFile(file: File): Promise<void> {
   if (!/\.midi?$/i.test(file.name)) {
@@ -394,7 +455,9 @@ function noteOn(midi: number): void {
     calibrationKey(midi);
     return;
   }
-  if (inputMode === "midi") engine?.noteOn(midi, performance.now());
+  if (mode === "practice" && inputMode === "midi" && engine instanceof PracticeEngine) {
+    engine.noteOn(midi, performance.now());
+  }
 }
 
 // ---------- Micrófono (experimental) ----------
@@ -412,7 +475,7 @@ const MIC_STATE_CLASS: Record<MicState, string> = {
 const mic = new MicInput({
   onNote: (midi) => {
     // Mismo motor y misma validación que el piano MIDI; solo cambia la fuente de la nota.
-    if (inputMode !== "mic" || calibration || !engine) return;
+    if (mode !== "practice" || inputMode !== "mic" || calibration || !(engine instanceof PracticeEngine)) return;
     pressed.add(midi);
     window.setTimeout(() => pressed.delete(midi), 250);
     engine.noteOn(midi, performance.now());
@@ -430,14 +493,19 @@ const mic = new MicInput({
   },
 });
 
-function setInputMode(mode: InputMode): void {
-  if (mode === inputMode) return;
-  inputMode = mode;
-  els.inputMode.value = mode;
-  els.micBar.hidden = mode !== "mic";
+function setInputMode(next: InputMode): void {
+  if (next === "mic" && mode === "listen") {
+    els.inputMode.value = inputMode;
+    say("El micrófono solo se usa en el modo Practicar.", "info");
+    return;
+  }
+  if (next === inputMode) return;
+  inputMode = next;
+  els.inputMode.value = next;
+  els.micBar.hidden = next !== "mic";
   pressed.clear();
   updateAudioControls();
-  if (mode === "mic") {
+  if (next === "mic") {
     if (calibration) endCalibration();
     if (engine) {
       const s = engine.getSnapshot().state;
@@ -535,8 +603,15 @@ els.play.addEventListener("click", () => {
 });
 els.restart.addEventListener("click", () => {
   engine?.reset();
+  audio.seek(0);
   pressed.clear();
-  say("Práctica reiniciada desde la primera nota.", "info");
+  say(mode === "listen" ? "Reproducción reiniciada desde el inicio." : "Práctica reiniciada desde la primera nota.", "info");
+});
+
+els.seek.addEventListener("input", () => {
+  if (mode !== "listen" || !(engine instanceof ListenEngine)) return;
+  engine.seek(Number(els.seek.value));
+  audio.seek(engine.getSnapshot().time);
 });
 
 function togglePlay(): void {
@@ -639,11 +714,20 @@ function updatePanel(snap: EngineSnapshot | null): void {
   }
 
   let expected = "—";
-  if (snap && (state === "running" || state === "waiting")) {
+  if (mode === "practice" && snap && (state === "running" || state === "waiting")) {
     expected = snap.pendingMidis.map(noteName).join(" · ") || "—";
   } else if (state === "paused") expected = "En pausa";
   else if (state === "finished") expected = "¡Listo!";
   setText(els.expected, "expected", expected);
+
+  if (mode === "listen") {
+    const time = snap?.time ?? 0;
+    els.seek.value = String(time);
+    els.seek.setAttribute(
+      "aria-valuetext",
+      `${formatDuration(time)} de ${formatDuration(song?.durationSec ?? 0)}`,
+    );
+  }
 
   const playLabel =
     state === "idle" ? "Iniciar" : state === "paused" ? "Reanudar" : state === "finished" ? "Terminó" : "Pausar";
@@ -652,6 +736,7 @@ function updatePanel(snap: EngineSnapshot | null): void {
 }
 
 renderKeysSelect();
+updateModeControls();
 updateAudioControls();
 
 // ---------- Bucle de dibujo ----------
@@ -659,7 +744,10 @@ updateAudioControls();
 function frame(now: number): void {
   engine?.update();
   const snap = engine?.getSnapshot() ?? null;
-  if (snap) audio.tick(snap.state, snap.time, snap.currentGroup?.time ?? null);
+  if (snap) {
+    const ceiling = mode === "practice" ? snap.currentGroup?.time ?? null : null;
+    audio.tick(snap.state, snap.time, ceiling);
+  }
   for (const [midi, until] of wrongUntil) if (until <= now) wrongUntil.delete(midi);
   stage.render(snap, pressed, wrongUntil, now);
   updatePanel(snap);

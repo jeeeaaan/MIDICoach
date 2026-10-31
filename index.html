@@ -138,8 +138,15 @@
 
     <footer class="panel" id="panelView">
       <div class="controls">
-        <button id="play" class="btn primary" type="button" title="Inicia, pausa o reanuda la práctica (barra espaciadora)" disabled>Iniciar</button>
-        <button id="restart" class="btn ghost" type="button" title="Vuelve a la primera nota y borra errores y progreso" disabled>Reiniciar</button>
+        <label class="mode-control" for="mode">
+          <span>Modo</span>
+          <select id="mode" aria-label="Modo de funcionamiento" title="Practicar espera tus notas; Escuchar reproduce la canción completa">
+            <option value="practice">Practicar</option>
+            <option value="listen">Escuchar</option>
+          </select>
+        </label>
+        <button id="play" class="btn primary" type="button" title="Inicia, pausa o reanuda (barra espaciadora)" disabled>Iniciar</button>
+        <button id="restart" class="btn ghost" type="button" title="Vuelve al inicio de la canción" disabled>Reiniciar</button>
       </div>
 
       <div class="progress-wrap" title="Porcentaje de notas completadas">
@@ -154,6 +161,19 @@
         >
           <div id="bar"></div>
         </div>
+        <input
+          id="seek"
+          class="seek"
+          type="range"
+          min="0"
+          max="0"
+          step="0.01"
+          value="0"
+          aria-label="Posición de reproducción"
+          title="Cambia la posición de la canción"
+          disabled
+          hidden
+        />
         <span id="pct">0 %</span>
       </div>
 
@@ -178,7 +198,7 @@
         <nav class="help-toc" aria-label="Contenido">
           <a href="#ayuda-inicio">Primeros pasos</a>
           <a href="#ayuda-controles">Controles</a>
-          <a href="#ayuda-modos">Modos de práctica</a>
+          <a href="#ayuda-modos">Modos de uso</a>
           <a href="#ayuda-rango">Rango y calibración</a>
           <a href="#ayuda-microfono">Micrófono</a>
                     <a href="#ayuda-audio">Audio</a>
@@ -210,8 +230,8 @@
             </li>
           </ol>
           <p>
-            Sin piano también puedes probar: haz clic o toca las teclas del teclado dibujado en pantalla. El audio de
-            la canción solo está disponible con un piano conectado.
+            Sin piano también puedes practicar con las teclas dibujadas en pantalla. Para reproducir la canción completa
+            sin ninguna entrada, elige <em>Modo → Escuchar</em> y activa <em>Audio</em>: no necesitas conectar un piano.
           </p>
         </section>
 
@@ -231,7 +251,7 @@
             <dt>Lista de dispositivos</dt>
             <dd>Muestra los teclados MIDI detectados. Cámbiala si tienes más de uno conectado.</dd>
             <dt>Audio (casilla)</dt>
-            <dd>Activa o desactiva el sonido de la canción. Solo se habilita con un piano conectado.</dd>
+            <dd>Activa o desactiva el sonido. En Practicar se habilita con un piano conectado; en Escuchar no hace falta.</dd>
             <dt>Volumen (barra)</dt>
             <dd>Sube o baja el volumen del audio de la canción. Se habilita cuando el audio está activado.</dd>
             <dt>Ajustes</dt>
@@ -243,20 +263,28 @@
             <dt>Última tecla detectada (en Ajustes)</dt>
             <dd>Muestra la última tecla que pulsaste. Sirve para comprobar que el piano responde.</dd>
             <dt>Pistas (casillas bajo el título)</dt>
-            <dd>Eligen qué partes de la canción vas a tocar. Las que no marques suenan solas como acompañamiento (si el audio está activado). Siempre debe quedar al menos una.</dd>
+            <dd>En Practicar eligen qué partes vas a tocar; siempre debe quedar al menos una. En Escuchar se muestran y reproducen todas, y las casillas quedan deshabilitadas sin perder tu selección.</dd>
+            <dt>Modo</dt>
+            <dd>Practicar espera cada nota o acorde. Escuchar reproduce la canción completa sin esperar entradas. Cambiar de modo vuelve al inicio.</dd>
             <dt>Iniciar / Pausar / Reanudar</dt>
-            <dd>Controla la práctica. También funciona la barra espaciadora.</dd>
+            <dd>Controla la práctica o la reproducción. También funciona la barra espaciadora.</dd>
             <dt>Reiniciar</dt>
-            <dd>Vuelve a la primera nota y borra el progreso y los errores.</dd>
+            <dd>Vuelve al inicio. En Practicar también borra el progreso y los errores.</dd>
+            <dt>Posición (barra en Escuchar)</dt>
+            <dd>Cambia la posición temporal de la canción durante la reproducción o la pausa. En Practicar la barra sigue mostrando las notas completadas y no se puede arrastrar.</dd>
             <dt>Ayuda</dt>
             <dd>Abre esta guía. Con <em>Volver a la práctica</em> regresas donde estabas.</dd>
           </dl>
         </section>
 
         <section id="ayuda-modos">
-          <h3>Modos de práctica</h3>
+          <h3>Modos de uso</h3>
+          <ul>
+            <li><strong>Practicar:</strong> la canción se detiene en cada nota o acorde hasta que tocas las teclas correctas.</li>
+            <li><strong>Escuchar:</strong> reproduce todas las pistas de principio a fin, sin esperar MIDI, micrófono ni teclado visual. Puedes pausar, reanudar, reiniciar y cambiar la posición.</li>
+          </ul>
           <p>
-            La aplicación practica por <strong>pistas</strong>. En muchas canciones, una pista es la mano derecha
+            La práctica se organiza por <strong>pistas</strong>. En muchas canciones, una pista es la mano derecha
             (melodía) y otra la mano izquierda (acompañamiento), pero depende de cada archivo: los nombres vienen del MIDI.
           </p>
           <ul>
@@ -323,9 +351,9 @@
         <section id="ayuda-audio">
           <h3>Audio de la canción</h3>
           <ul>
-            <li>Conecta un piano para habilitar la casilla <em>Audio</em>; sin piano permanece desactivada.</li>
-            <li>Con el audio activado oyes el acompañamiento (pistas que no practicas y batería) y tus notas acertadas.</li>
-            <li>El acompañamiento sigue el ritmo de la práctica: se detiene cuando la canción espera tu nota y se pausa contigo.</li>
+            <li>En <em>Practicar</em>, conecta un piano para habilitar <em>Audio</em>. Oirás el acompañamiento, la batería y tus notas acertadas; el acompañamiento espera contigo.</li>
+            <li>En <em>Escuchar</em>, activa <em>Audio</em> sin conectar ningún piano. Suenan todas las pistas melódicas y la batería con sus alturas originales.</li>
+            <li>Pausar silencia lo programado y reanudar continúa desde la misma posición. Al buscar, el audio y las notas visuales se reposicionan juntos.</li>
             <li>La barra <em>Volumen</em> regula el nivel. Para silenciar por completo, desmarca <em>Audio</em>.</li>
             <li>
               Al activar el audio se descarga y prepara el sonido de piano (unos 2 MB, queda en tu equipo). Mientras
@@ -341,8 +369,8 @@
         <section id="ayuda-progreso">
           <h3>Progreso y errores</h3>
           <ul>
-            <li><strong>Barra de progreso:</strong> porcentaje de notas completadas.</li>
-            <li><strong>Notas:</strong> notas completadas sobre el total de las pistas elegidas (sin contar las omitidas).</li>
+            <li><strong>Barra de progreso:</strong> en Practicar, porcentaje de notas completadas; en Escuchar, posición sobre la duración total y control de búsqueda.</li>
+            <li><strong>Notas:</strong> en Practicar, notas completadas de las pistas elegidas; en Escuchar, notas cuyo inicio ya alcanzó el reloj (sin contar las omitidas).</li>
             <li><strong>Errores:</strong> veces que pulsaste una tecla incorrecta. La tecla se marca en rojo un instante.</li>
             <li><strong>Toca:</strong> la nota o acorde que debes tocar ahora; también se resalta en el teclado.</li>
             <li>
@@ -361,7 +389,7 @@
             <dt>El micrófono no reconoce mis notas</dt>
             <dd>Acepta el permiso del navegador, acerca el micrófono al piano, baja el ruido de fondo, toca una nota a la vez y prueba la tolerancia «Amplia» en Ajustes. Si la canción tiene acordes, usa un teclado MIDI. Mira «Se oye»: si no cambia, no llega sonido.</dd>
             <dt>No se oye nada</dt>
-            <dd>Conecta el piano y marca <em>Audio</em>. Revisa el volumen de la aplicación y del equipo. Si el piano tiene sonido propio, no es el que oyes aquí: esta aplicación suena por las bocinas o audífonos de la computadora.</dd>
+            <dd>Marca <em>Audio</em> y revisa el volumen de la aplicación y del equipo. En Practicar necesitas un piano conectado; en Escuchar no. Esta aplicación suena por las bocinas o audífonos de la computadora o teléfono.</dd>
             <dt>La canción no avanza</dt>
             <dd>Mira el estado: si dice <em>Esperando tu nota</em>, toca la nota que indica <em>Toca</em>. Si dice <em>En pausa</em>, pulsa <em>Reanudar</em>. Comprueba en Ajustes que la última tecla detectada cambie al tocar.</dd>
             <dt>Las notas no coinciden con mis teclas</dt>
@@ -378,7 +406,7 @@
             <dt>¿Se admiten partituras o audio (MP3, PDF)?</dt>
             <dd>No, solo archivos MIDI.</dd>
             <dt>¿Qué necesito para usar la aplicación?</dt>
-            <dd>Un navegador moderno con Web MIDI (Chrome o Edge en computadora) y un teclado MIDI por USB. Sin piano MIDI puedes usar el micrófono (experimental) o el teclado en pantalla, sin audio de la canción.</dd>
+            <dd>Para Escuchar solo necesitas un navegador moderno con Web Audio. Para Practicar con un piano físico, usa un navegador con Web MIDI y un teclado por USB; también puedes usar el micrófono (experimental) o el teclado en pantalla.</dd>
             <dt>¿Se envía mi archivo a algún servidor?</dt>
             <dd>No: el archivo se lee en tu navegador.</dd>
             <dt>¿Se guarda mi progreso?</dt>
@@ -402,7 +430,7 @@
           </ol>
           <p><strong>Sin conexión.</strong> Después de abrirla una vez con internet, también puedes usarla sin conexión:</p>
           <ul>
-            <li>Disponible: abrir archivos MIDI de tu equipo, la canción de prueba, practicar con el teclado MIDI, el micrófono, la adaptación al teclado y esta ayuda.</li>
+              <li>Disponible: abrir archivos MIDI de tu equipo, la canción de prueba, practicar, escuchar la canción completa, usar el teclado MIDI o el micrófono, la adaptación al teclado y esta ayuda.</li>
             <li>
               El sonido de piano grabado se guarda la primera vez que activas el <em>Audio</em> con conexión. Si no lo
               has hecho, sin conexión el piano suena con el sonido básico.

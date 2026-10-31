@@ -117,6 +117,10 @@ export class SongAudio {
     this.scheduler?.tick(state, time, ceiling);
   }
 
+  seek(time: number): void {
+    this.scheduler?.seek(time);
+  }
+
   /** Suena de inmediato una nota que el usuario tocó correctamente. */
   playUser(note: PlayableNote): void {
     if (!this.on || !this.synth || !this.ctx) return;

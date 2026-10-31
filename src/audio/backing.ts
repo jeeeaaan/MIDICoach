@@ -81,6 +81,12 @@ export class BackingScheduler {
     this.lastTime = time;
   }
 
+  seek(time: number): void {
+    this.cursor = this.firstAtOrAfter(time - EPS);
+    this.lastTime = time;
+    this.silence();
+  }
+
   private silence(): void {
     if (!this.sounding) return;
     this.sounding = false;
