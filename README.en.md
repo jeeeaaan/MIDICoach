@@ -1,4 +1,4 @@
-# Mi Piano 🎹
+# MIDICoach 🎹
 
 A Progressive Web App (PWA) for practicing piano with MIDI files. The song pauses until you play the correct note or chord on your MIDI keyboard, allowing you to learn at your own pace.
 
